@@ -26,6 +26,11 @@ export class MessageGroups extends EventEmitter {
 	};
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // 5 minutes
 	private messageGroups: Array<MessageGroup> = [];
+	private messages:Array<any> = [];
+
+	public getMessageHistory():Array<any> {
+		return this.messages;
+	}
 	public addMessage(data) {
 		let lastMessageGroup = _.last(this.messageGroups);
 		let groupToAddTo = lastMessageGroup;
@@ -34,12 +39,14 @@ export class MessageGroups extends EventEmitter {
 			const sender = this.chatUserList.getUser(data.uid);
 			const messageGroup = new MessageGroup(sender, data.timestamp, [data]);
 			this.messageGroups.push(messageGroup);
+			
 			(this as any).emit('group-added', {
 				messageGroup: messageGroup
 			});
 		} else {
 			groupToAddTo.addMessage(data);
 		}
+		this.messages.push(data);
 	}
 	public getMessageGroups() { return this.messageGroups; }
 	public isEmpty():boolean {

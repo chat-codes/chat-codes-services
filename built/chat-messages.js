@@ -28,8 +28,12 @@ class MessageGroups extends events_1.EventEmitter {
         this.chatUserList = chatUserList;
         this.messageGroupingTimeThreshold = 5 * 60 * 1000; // 5 minutes
         this.messageGroups = [];
+        this.messages = [];
     }
     ;
+    getMessageHistory() {
+        return this.messages;
+    }
     addMessage(data) {
         let lastMessageGroup = _.last(this.messageGroups);
         let groupToAddTo = lastMessageGroup;
@@ -44,6 +48,7 @@ class MessageGroups extends events_1.EventEmitter {
         else {
             groupToAddTo.addMessage(data);
         }
+        this.messages.push(data);
     }
     getMessageGroups() { return this.messageGroups; }
     isEmpty() {

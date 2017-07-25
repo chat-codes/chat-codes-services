@@ -1,30 +1,45 @@
 import * as _ from 'underscore';
+import { EventEmitter } from 'events';
 // import {RemoteCursorMarker} from './remote_cursor_marker';
-class RemoteCursorMarker {
-    constructor() { }
+export class RemoteCursorMarker extends EventEmitter {
+    constructor(private editorState:EditorState) {
+		super();
+	}
 	private cursors:{[cursorID:number]:any} = {};
 	public updateCursor(id, user, pos) {
 		if(this.cursors[id]) {
 			this.cursors[id].pos = pos;
+			this.editorState.getEditorWrapper().updateRemoteCursorPosition(this.cursors[id], this);
 		} else {
-			this.cursors[id] = {pos: pos, user: user};
+			this.cursors[id] = { id: id, user: user, pos: pos };
+			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
 		}
 	};
 	public updateSelection(id, user, range) {
 		if(this.cursors[id]) {
 			this.cursors[id].range = range;
+			this.editorState.getEditorWrapper().updateRemoteCursorSelection(this.cursors[id], this);
 		} else {
-			this.cursors[id] = { user: user, range: range };
+			this.cursors[id] = { id: id, user: user, range: range };
+			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
 		}
 	};
+	public getCursors() {
+		return this.cursors;
+	}
 }
 
 interface EditorWrapper {
+	setEditorState(editorState:EditorState);
 	setGrammar(grammarName:string);
 	replaceText(range, value:string);
 	getAnchor(range);
 	getCurrentAnchorPosition(anchor);
 	setText(value:string);
+	addRemoteCursor(cursor, remoteCursorMarker:RemoteCursorMarker);
+	updateRemoteCursorPosition(cursor, remoteCursorMarker:RemoteCursorMarker);
+	updateRemoteCursorSelection(cursor, remoteCursorMarker:RemoteCursorMarker);
+    // saveFile();
 }
 
 interface Delta {
@@ -198,13 +213,13 @@ class ModifiedDelta implements UndoableDelta {
 export class EditorState {
 	private isOpen:boolean;
 	private deltas: Array<UndoableDelta> = [];
-    private cursors:{[cursorID:number]:any} = {};
     private selections:{[selectionID:number]:any} = {};
 	private editorID:number;
-	private remoteCursors:RemoteCursorMarker = new RemoteCursorMarker();
+	private remoteCursors:RemoteCursorMarker = new RemoteCursorMarker(this);
 	private title:string;
 	private modified:boolean;
     constructor(state, private editorWrapper) {
+		this.editorWrapper.setEditorState(this);
 		this.editorID = state.id;
 		state.deltas.forEach((d) => {
 			this.addDelta(d);
@@ -238,7 +253,6 @@ export class EditorState {
 		} else {
 			console.log(serializedDelta);
 		}
-		console.log(delta);
 
 		if(delta) {
 			this.handleDelta(delta, mustPerformChange);

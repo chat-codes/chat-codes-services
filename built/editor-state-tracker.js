@@ -1,30 +1,41 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
+const events_1 = require("events");
 // import {RemoteCursorMarker} from './remote_cursor_marker';
-class RemoteCursorMarker {
-    constructor() {
+class RemoteCursorMarker extends events_1.EventEmitter {
+    constructor(editorState) {
+        super();
+        this.editorState = editorState;
         this.cursors = {};
     }
     updateCursor(id, user, pos) {
         if (this.cursors[id]) {
             this.cursors[id].pos = pos;
+            this.editorState.getEditorWrapper().updateRemoteCursorPosition(this.cursors[id], this);
         }
         else {
-            this.cursors[id] = { pos: pos, user: user };
+            this.cursors[id] = { id: id, user: user, pos: pos };
+            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
         }
     }
     ;
     updateSelection(id, user, range) {
         if (this.cursors[id]) {
             this.cursors[id].range = range;
+            this.editorState.getEditorWrapper().updateRemoteCursorSelection(this.cursors[id], this);
         }
         else {
-            this.cursors[id] = { user: user, range: range };
+            this.cursors[id] = { id: id, user: user, range: range };
+            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
         }
     }
     ;
+    getCursors() {
+        return this.cursors;
+    }
 }
+exports.RemoteCursorMarker = RemoteCursorMarker;
 class TitleDelta {
     constructor(serializedState) {
         this.oldTitle = serializedState.oldTitle;
@@ -166,9 +177,9 @@ class EditorState {
     constructor(state, editorWrapper) {
         this.editorWrapper = editorWrapper;
         this.deltas = [];
-        this.cursors = {};
         this.selections = {};
-        this.remoteCursors = new RemoteCursorMarker();
+        this.remoteCursors = new RemoteCursorMarker(this);
+        this.editorWrapper.setEditorState(this);
         this.editorID = state.id;
         state.deltas.forEach((d) => {
             this.addDelta(d);
@@ -212,7 +223,6 @@ class EditorState {
         else {
             console.log(serializedDelta);
         }
-        console.log(delta);
         if (delta) {
             this.handleDelta(delta, mustPerformChange);
         }

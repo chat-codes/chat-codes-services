@@ -92,7 +92,7 @@ class PusherCommunicationLayer {
                     if (!triggered) {
                         this.messageQueue.unshift(lastItem);
                     }
-                    this.emitTimeout = window.setTimeout(() => {
+                    this.emitTimeout = setTimeout(() => {
                         this.emitTimeout = false;
                         this.shiftMessageFromQueue();
                     }, EMIT_RATE);

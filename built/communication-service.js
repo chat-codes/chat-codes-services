@@ -5,17 +5,63 @@ const chat_user_1 = require("./chat-user");
 const pusher_communication_layer_1 = require("./pusher-communication-layer");
 const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
-class CommunicationService extends events_1.EventEmitter {
-    constructor(userName, channelName, key, cluster) {
+const DEBUG = true;
+function generateChannelName(commLayer) {
+    const fs = require('fs');
+    const path = require('path');
+    if (DEBUG) {
+        return Promise.resolve('c2');
+    }
+    else {
+        const WORD_FILE_NAME = 'google-10000-english-usa-no-swears-medium.txt';
+        return new Promise(function (resolve, reject) {
+            fs.readFile(path.join(__dirname, WORD_FILE_NAME), { encoding: 'utf-8' }, function (err, result) {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(result);
+                }
+            });
+        }).then(function (words) {
+            return _.shuffle(words.split(/\n/));
+        }).then(function (wordList) {
+            function* getNextWord() {
+                for (var i = 0; i < wordList.length; i++) {
+                    yield wordList[i];
+                }
+                var j = 0;
+                while (true) {
+                    yield j + '';
+                    j++;
+                }
+            }
+            function getNextAvailableName(iterator) {
+                if (!iterator) {
+                    iterator = getNextWord();
+                }
+                const { value } = iterator.next();
+                return commLayer.channelNameAvailable(value).then(function (available) {
+                    if (available) {
+                        return value;
+                    }
+                    else {
+                        return getNextAvailableName(iterator);
+                    }
+                });
+            }
+            return getNextAvailableName(null);
+        });
+    }
+}
+class ChannelCommunicationService extends events_1.EventEmitter {
+    constructor(commService, channelName) {
         super();
-        this.userName = userName;
+        this.commService = commService;
         this.channelName = channelName;
         this.userList = new chat_user_1.ChatUserList();
         this.messageGroups = new chat_messages_1.MessageGroups(this.userList);
-        this.commLayer = new pusher_communication_layer_1.PusherCommunicationLayer({
-            username: userName
-        }, key, cluster);
-        this.channelName = channelName;
+        this.commLayer = commService.commLayer;
         this.commLayer.bind(this.channelName, 'terminal-data', (event) => {
             this.emit('terminal-data', event);
         });
@@ -41,6 +87,9 @@ class CommunicationService extends events_1.EventEmitter {
         this.commLayer.bind(this.channelName, 'typing', (data) => {
             const { uid, status } = data;
             const user = this.userList.getUser(uid);
+            this.emit('typing', _.extend({
+                sender: user
+            }, data));
             if (user) {
                 user.setTypingStatus(status);
             }
@@ -57,12 +106,22 @@ class CommunicationService extends events_1.EventEmitter {
         this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
             this.emit('editor-opened', data);
         });
+        this.commLayer.bind(this.channelName, 'write-to-terminal', (data) => {
+            this.emit('write-to-terminal', data);
+        });
         this.commLayer.getMembers(this.channelName).then((memberInfo) => {
             this.myID = memberInfo.myID;
             this.userList.addAll(memberInfo);
         });
         this.commLayer.onMemberAdded(this.channelName, (member) => {
             this.userList.add(false, member.id, member.info.name);
+            if (this.commService.isRoot) {
+                this.sendMessageHistory(member.id);
+                // this.commLayer.trigger(this.channelName, 'editor-state', {
+                //     forUser: member.id,
+                //     state: this.editorWatcher.serializeEditorStates()
+                // });
+            }
         });
         this.commLayer.onMemberRemoved(this.channelName, (member) => {
             this.userList.remove(member.id);
@@ -74,6 +133,11 @@ class CommunicationService extends events_1.EventEmitter {
     emitSave(data) {
         this.emit('message', _.extend({
             sender: this.userList.getMe(),
+            timestamp: this.getTimestamp()
+        }, data));
+    }
+    emitEditorOpened(data) {
+        this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
             timestamp: this.getTimestamp()
         }, data));
     }
@@ -106,27 +170,35 @@ class CommunicationService extends events_1.EventEmitter {
             meUser.setTypingStatus(status);
         }
     }
-    emitEditorChanged(delta) {
+    emitEditorChanged(delta, remote = true) {
         this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
             timestamp: this.getTimestamp(),
             uid: this.myID,
-            remote: true
+            remote: remote
         }, delta));
     }
-    emitCursorPositionChanged(delta) {
+    emitCursorPositionChanged(delta, remote = true) {
         this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
             timestamp: this.getTimestamp(),
             uid: this.myID,
-            remote: true
+            remote: remote
         }, delta));
     }
-    emitCursorSelectionChanged(delta) {
+    emitCursorSelectionChanged(delta, remote = true) {
         this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
             timestamp: this.getTimestamp(),
             uid: this.myID,
-            remote: true
+            remote: remote
         }, delta));
     }
+    emitTerminalData(data, remote = false) {
+        this.commLayer.trigger(this.channelName, 'terminal-data', {
+            timestamp: this.getTimestamp(),
+            data: data,
+            remote: remote
+        });
+    }
+    ;
     writeToTerminal(data) {
         this.commLayer.trigger(this.channelName, 'write-to-terminal', {
             timestamp: this.getTimestamp(),
@@ -135,11 +207,59 @@ class CommunicationService extends events_1.EventEmitter {
             contents: data
         });
     }
+    getURL() {
+        const url = require('url');
+        return url.format({
+            protocol: 'http',
+            host: 'chat.codes',
+            pathname: this.channelName
+        });
+    }
+    sendMessageHistory(forUser) {
+        this.commLayer.trigger(this.channelName, 'message-history', {
+            history: this.messageGroups.getMessageHistory(),
+            allUsers: this.userList.serialize(),
+            forUser: forUser
+        });
+    }
     destroy() {
         this.commLayer.destroy();
     }
     getTimestamp() {
         return new Date().getTime();
+    }
+}
+exports.ChannelCommunicationService = ChannelCommunicationService;
+class CommunicationService {
+    constructor(isRoot, username, key, cluster) {
+        this.isRoot = isRoot;
+        this.clients = {};
+        this.commLayer = new pusher_communication_layer_1.PusherCommunicationLayer({
+            username: username
+        }, key, cluster);
+    }
+    createChannel() {
+        return generateChannelName(this.commLayer).then((channelName) => {
+            return this.createChannelWithName(channelName);
+        });
+    }
+    createChannelWithName(channelName) {
+        var channel = new ChannelCommunicationService(this, channelName);
+        this.clients[channelName] = channel;
+        return channel;
+    }
+    destroyChannel(name) {
+        if (this.clients[name]) {
+            var client = this.clients[name];
+            client.destroy();
+            delete this.clients[name];
+        }
+    }
+    destroy() {
+        this.commLayer.destroy();
+        _.each(this.clients, (client, name) => {
+            this.destroyChannel(name);
+        });
     }
 }
 exports.CommunicationService = CommunicationService;
