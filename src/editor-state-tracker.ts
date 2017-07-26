@@ -1,5 +1,6 @@
 import * as _ from 'underscore';
 import { EventEmitter } from 'events';
+import { ChannelCommunicationService } from './communication-service';
 // import {RemoteCursorMarker} from './remote_cursor_marker';
 export class RemoteCursorMarker extends EventEmitter {
     constructor(private editorState:EditorState) {
@@ -24,6 +25,11 @@ export class RemoteCursorMarker extends EventEmitter {
 			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
 		}
 	};
+    public removeCursor(id, user) {
+		if(this.cursors[id]) {
+			this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors[id], this);
+		}
+    }
 	public getCursors() {
 		return this.cursors;
 	}
@@ -39,7 +45,9 @@ interface EditorWrapper {
 	addRemoteCursor(cursor, remoteCursorMarker:RemoteCursorMarker);
 	updateRemoteCursorPosition(cursor, remoteCursorMarker:RemoteCursorMarker);
 	updateRemoteCursorSelection(cursor, remoteCursorMarker:RemoteCursorMarker);
-    // saveFile();
+	removeRemoteCursor(cursor, remoteCursorMarker:RemoteCursorMarker);
+    saveFile();
+	serializeEditorStates();
 }
 
 interface Delta {
@@ -218,12 +226,14 @@ export class EditorState {
 	private remoteCursors:RemoteCursorMarker = new RemoteCursorMarker(this);
 	private title:string;
 	private modified:boolean;
-    constructor(state, private editorWrapper) {
+    constructor(state, private editorWrapper, mustPerformChange:boolean) {
 		this.editorWrapper.setEditorState(this);
 		this.editorID = state.id;
-		state.deltas.forEach((d) => {
-			this.addDelta(d);
-		});
+		if(mustPerformChange) {
+			state.deltas.forEach((d) => {
+				this.addDelta(d);
+			});
+		}
 		state.cursors.forEach((c) => {
 
 		});
@@ -296,7 +306,9 @@ export class EditorState {
 
 export class EditorStateTracker {
     private editorStates:{[editorID:number]: EditorState} = {};
-    constructor(protected editorStateWrapperFactory) { }
+    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService) {
+		this.editorWrapper = new this.EditorWrapperClass(this.channelCommunicationService);
+	}
 	public handleEvent(event) {
 		const editorState = this.getEditorState(event.id);
 		if(editorState) {
@@ -316,9 +328,13 @@ export class EditorStateTracker {
 		});
 		return rv;
 	}
-	public onEditorOpened(state) {
-		const editorState =  new EditorState(state, this.editorStateWrapperFactory(state));
+	public onEditorOpened(state, mustPerformChange:boolean) {
+		console.log(this.EditorWrapperClass);
+		const editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
 		this.editorStates[state.id] = editorState;
 		return editorState;
 	}
+	public serializeEditorStates() {
+
+	};
 }

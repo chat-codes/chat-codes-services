@@ -31,6 +31,11 @@ class RemoteCursorMarker extends events_1.EventEmitter {
         }
     }
     ;
+    removeCursor(id, user) {
+        if (this.cursors[id]) {
+            this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors[id], this);
+        }
+    }
     getCursors() {
         return this.cursors;
     }
@@ -174,16 +179,18 @@ class ModifiedDelta {
     }
 }
 class EditorState {
-    constructor(state, editorWrapper) {
+    constructor(state, editorWrapper, mustPerformChange) {
         this.editorWrapper = editorWrapper;
         this.deltas = [];
         this.selections = {};
         this.remoteCursors = new RemoteCursorMarker(this);
         this.editorWrapper.setEditorState(this);
         this.editorID = state.id;
-        state.deltas.forEach((d) => {
-            this.addDelta(d);
-        });
+        if (mustPerformChange) {
+            state.deltas.forEach((d) => {
+                this.addDelta(d);
+            });
+        }
         state.cursors.forEach((c) => {
         });
     }
@@ -264,9 +271,11 @@ class EditorState {
 }
 exports.EditorState = EditorState;
 class EditorStateTracker {
-    constructor(editorStateWrapperFactory) {
-        this.editorStateWrapperFactory = editorStateWrapperFactory;
+    constructor(EditorWrapperClass, channelCommunicationService) {
+        this.EditorWrapperClass = EditorWrapperClass;
+        this.channelCommunicationService = channelCommunicationService;
         this.editorStates = {};
+        this.editorWrapper = new this.EditorWrapperClass(this.channelCommunicationService);
     }
     handleEvent(event) {
         const editorState = this.getEditorState(event.id);
@@ -289,11 +298,15 @@ class EditorStateTracker {
         });
         return rv;
     }
-    onEditorOpened(state) {
-        const editorState = new EditorState(state, this.editorStateWrapperFactory(state));
+    onEditorOpened(state, mustPerformChange) {
+        console.log(this.EditorWrapperClass);
+        const editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
         this.editorStates[state.id] = editorState;
         return editorState;
     }
+    serializeEditorStates() {
+    }
+    ;
 }
 exports.EditorStateTracker = EditorStateTracker;
 //# sourceMappingURL=editor-state-tracker.js.map

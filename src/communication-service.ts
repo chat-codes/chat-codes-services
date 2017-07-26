@@ -3,6 +3,7 @@ import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
+import {EditorStateTracker} from './editor-state-tracker';
 declare function require(name:string);
 declare var __dirname:string;
 
@@ -58,8 +59,10 @@ function generateChannelName(commLayer) {
 }
 
 export class ChannelCommunicationService extends EventEmitter {
-    constructor(private commService:CommunicationService, private channelName:string) {
+    constructor(private commService:CommunicationService, private channelName:string, EditorWrapperClass) {
         super();
+        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this);
+
         this.commLayer = commService.commLayer;
         this.commLayer.bind(this.channelName, 'terminal-data', (event) => {
             (this as any).emit('terminal-data', event);
@@ -96,15 +99,43 @@ export class ChannelCommunicationService extends EventEmitter {
             }
     	});
         this.commLayer.bind(this.channelName, 'editor-event', (data) => {
+			this.editorStateTracker.handleEvent(data);
             (this as any).emit('editor-event', data);
         });
         this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
+			const {id, type, uid} = data;
+			let user = this.userList.getUser(uid);
+
+			if(type === 'change-position') {
+				const {newBufferPosition, oldBufferPosition, newRange, id, editorID} = data;
+				const editorState = this.editorStateTracker.getEditorState(editorID);
+				if(editorState) {
+					const remoteCursors = editorState.getRemoteCursors();
+					remoteCursors.updateCursor(id, user, {row: newBufferPosition[0], column: newBufferPosition[1]});
+				}
+			} else if(type === 'change-selection') {
+				const {newRange, id, editorID} = data;
+				const editorState = this.editorStateTracker.getEditorState(editorID);
+				if(editorState) {
+					const remoteCursors = editorState.getRemoteCursors();
+					remoteCursors.updateSelection(id, user, newRange);
+				}
+			} else if(type === 'destroy') {
+				const {newRange, id, editorID} = data;
+				const editorState = this.editorStateTracker.getEditorState(editorID);
+				if(editorState) {
+					const remoteCursors = editorState.getRemoteCursors();
+					remoteCursors.removeCursor(id, user);
+				}
+			}
             (this as any).emit('cursor-event', data);
         });
     	this.commLayer.bind(this.channelName, 'editor-state', (data) => {
             (this as any).emit('editor-state', data);
     	});
     	this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
+            const mustPerformChange = !this.isRoot();
+    		const editorState = this.editorStateTracker.onEditorOpened(data, mustPerformChange);
             (this as any).emit('editor-opened', data);
     	});
         this.commLayer.bind(this.channelName, 'write-to-terminal', (data) => {
@@ -118,17 +149,20 @@ export class ChannelCommunicationService extends EventEmitter {
 
         this.commLayer.onMemberAdded(this.channelName, (member) => {
             this.userList.add(false, member.id, member.info.name);
-            if(this.commService.isRoot) {
+            if(this.isRoot()) {
                 this.sendMessageHistory(member.id);
-                // this.commLayer.trigger(this.channelName, 'editor-state', {
-                //     forUser: member.id,
-                //     state: this.editorWatcher.serializeEditorStates()
-                // });
+                this.commLayer.trigger(this.channelName, 'editor-state', {
+                    forUser: member.id,
+                    state: this.editorStateTracker.serializeEditorStates()
+                });
             }
         });
         this.commLayer.onMemberRemoved(this.channelName, (member) => {
             this.userList.remove(member.id);
         });
+    }
+    private isRoot():boolean {
+        return this.commService.isRoot;
     }
     public ready() {
         return this.commLayer.channelReady(this.channelName);
@@ -237,9 +271,14 @@ export class ChannelCommunicationService extends EventEmitter {
         this.commLayer.destroy();
     }
 
+    public getActiveEditors() {
+        return this.editorStateTracker.getActiveEditors();
+    }
+
     public userList:ChatUserList = new ChatUserList();
     public messageGroups:MessageGroups = new MessageGroups(this.userList);
     public commLayer:PusherCommunicationLayer;
+    private editorStateTracker:EditorStateTracker;
 
     private myID:string;
     private getTimestamp():number {
@@ -247,7 +286,7 @@ export class ChannelCommunicationService extends EventEmitter {
     }
 }
 export class CommunicationService {
-    constructor(public isRoot:boolean, username:string, key:string, cluster:string) {
+    constructor(public isRoot:boolean, username:string, key:string, cluster:string, private EditorWrapperClass) {
         this.commLayer = new PusherCommunicationLayer({
             username: username
         }, key, cluster);
@@ -262,7 +301,7 @@ export class CommunicationService {
     }
 
     public createChannelWithName(channelName:string):ChannelCommunicationService {
-        var channel = new ChannelCommunicationService(this, channelName);
+        var channel = new ChannelCommunicationService(this, channelName, this.EditorWrapperClass);
         this.clients[channelName] = channel;
         return channel;
     }
