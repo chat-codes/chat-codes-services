@@ -179,11 +179,16 @@ class ModifiedDelta {
     }
 }
 class EditorState {
-    constructor(state, editorWrapper, mustPerformChange) {
+    constructor(suppliedState, editorWrapper, mustPerformChange) {
         this.editorWrapper = editorWrapper;
         this.deltas = [];
         this.selections = {};
         this.remoteCursors = new RemoteCursorMarker(this);
+        let state = _.extend({
+            isOpen: true,
+            deltas: [],
+            cursors: []
+        }, suppliedState);
         this.editorWrapper.setEditorState(this);
         this.editorID = state.id;
         if (mustPerformChange) {
@@ -275,7 +280,6 @@ class EditorStateTracker {
         this.EditorWrapperClass = EditorWrapperClass;
         this.channelCommunicationService = channelCommunicationService;
         this.editorStates = {};
-        this.editorWrapper = new this.EditorWrapperClass(this.channelCommunicationService);
     }
     handleEvent(event) {
         const editorState = this.getEditorState(event.id);
@@ -299,9 +303,9 @@ class EditorStateTracker {
         return rv;
     }
     onEditorOpened(state, mustPerformChange) {
-        console.log(this.EditorWrapperClass);
         const editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
         this.editorStates[state.id] = editorState;
+        console.log(this.editorStates);
         return editorState;
     }
     serializeEditorStates() {

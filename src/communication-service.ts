@@ -174,6 +174,7 @@ export class ChannelCommunicationService extends EventEmitter {
         }, data));
     }
     public emitEditorOpened(data) {
+		const editorState = this.editorStateTracker.onEditorOpened(data, false);
         this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
             timestamp: this.getTimestamp()
         }, data));
@@ -278,7 +279,7 @@ export class ChannelCommunicationService extends EventEmitter {
     public userList:ChatUserList = new ChatUserList();
     public messageGroups:MessageGroups = new MessageGroups(this.userList);
     public commLayer:PusherCommunicationLayer;
-    private editorStateTracker:EditorStateTracker;
+    public editorStateTracker:EditorStateTracker;
 
     private myID:string;
     private getTimestamp():number {

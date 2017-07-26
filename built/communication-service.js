@@ -171,6 +171,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         }, data));
     }
     emitEditorOpened(data) {
+        const editorState = this.editorStateTracker.onEditorOpened(data, false);
         this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
             timestamp: this.getTimestamp()
         }, data));

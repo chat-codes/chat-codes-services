@@ -226,7 +226,13 @@ export class EditorState {
 	private remoteCursors:RemoteCursorMarker = new RemoteCursorMarker(this);
 	private title:string;
 	private modified:boolean;
-    constructor(state, private editorWrapper, mustPerformChange:boolean) {
+    constructor(suppliedState, private editorWrapper, mustPerformChange:boolean) {
+        let state = _.extend({
+            isOpen: true,
+            deltas: [],
+            cursors: []
+        }, suppliedState);
+
 		this.editorWrapper.setEditorState(this);
 		this.editorID = state.id;
 		if(mustPerformChange) {
@@ -307,7 +313,6 @@ export class EditorState {
 export class EditorStateTracker {
     private editorStates:{[editorID:number]: EditorState} = {};
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService) {
-		this.editorWrapper = new this.EditorWrapperClass(this.channelCommunicationService);
 	}
 	public handleEvent(event) {
 		const editorState = this.getEditorState(event.id);
@@ -329,9 +334,9 @@ export class EditorStateTracker {
 		return rv;
 	}
 	public onEditorOpened(state, mustPerformChange:boolean) {
-		console.log(this.EditorWrapperClass);
 		const editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
 		this.editorStates[state.id] = editorState;
+		console.log(this.editorStates);
 		return editorState;
 	}
 	public serializeEditorStates() {
