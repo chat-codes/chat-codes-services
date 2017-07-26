@@ -99,7 +99,7 @@ export class ChannelCommunicationService extends EventEmitter {
             }
     	});
         this.commLayer.bind(this.channelName, 'editor-event', (data) => {
-			this.editorStateTracker.handleEvent(data);
+			this.editorStateTracker.handleEvent(data, true);
             (this as any).emit('editor-event', data);
         });
         this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
@@ -131,11 +131,17 @@ export class ChannelCommunicationService extends EventEmitter {
             (this as any).emit('cursor-event', data);
         });
     	this.commLayer.bind(this.channelName, 'editor-state', (data) => {
-            (this as any).emit('editor-state', data);
+            const {forUser, state} = data;
+            if(forUser === this.myID) {
+                _.each(state, (serializedEditorState) => {
+                    this.editorStateTracker.onEditorOpened(serializedEditorState, true);
+                });
+                (this as any).emit('editor-state', data);
+            }
     	});
     	this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
-            const mustPerformChange = !this.isRoot();
-    		const editorState = this.editorStateTracker.onEditorOpened(data, mustPerformChange);
+            // const mustPerformChange = !this.isRoot();
+    		const editorState = this.editorStateTracker.onEditorOpened(data, true);
             (this as any).emit('editor-opened', data);
     	});
         this.commLayer.bind(this.channelName, 'write-to-terminal', (data) => {
@@ -150,10 +156,12 @@ export class ChannelCommunicationService extends EventEmitter {
         this.commLayer.onMemberAdded(this.channelName, (member) => {
             this.userList.add(false, member.id, member.info.name);
             if(this.isRoot()) {
-                this.sendMessageHistory(member.id);
+                const memberID = member.id;
+                const serializedState = this.editorStateTracker.serializeEditorStates();
+                this.sendMessageHistory(memberID);
                 this.commLayer.trigger(this.channelName, 'editor-state', {
-                    forUser: member.id,
-                    state: this.editorStateTracker.serializeEditorStates()
+                    forUser: memberID,
+                    state: serializedState
                 });
             }
         });
@@ -174,7 +182,7 @@ export class ChannelCommunicationService extends EventEmitter {
         }, data));
     }
     public emitEditorOpened(data) {
-		const editorState = this.editorStateTracker.onEditorOpened(data, false);
+		const editorState = this.editorStateTracker.onEditorOpened(data, true);
         this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
             timestamp: this.getTimestamp()
         }, data));
@@ -213,6 +221,7 @@ export class ChannelCommunicationService extends EventEmitter {
         }
     }
     public emitEditorChanged(delta, remote=true) {
+		this.editorStateTracker.handleEvent(delta, false);
         this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
 			timestamp: this.getTimestamp(),
             uid: this.myID,

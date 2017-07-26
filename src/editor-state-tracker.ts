@@ -33,6 +33,11 @@ export class RemoteCursorMarker extends EventEmitter {
 	public getCursors() {
 		return this.cursors;
 	}
+	public serialize() {
+		return {
+			cursors: this.cursors
+		};
+	}
 }
 
 interface EditorWrapper {
@@ -53,13 +58,14 @@ interface EditorWrapper {
 interface Delta {
     doAction(editorState:EditorState):void;
 	getTimestamp():number;
+	serialize();
 }
 interface UndoableDelta extends Delta {
 	undoAction(editorState:EditorState):void;
 }
 
 class TitleDelta implements UndoableDelta {
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.oldTitle = serializedState.oldTitle;
 		this.newTitle = serializedState.newTitle;
 		this.timestamp = serializedState.timestamp;
@@ -74,9 +80,12 @@ class TitleDelta implements UndoableDelta {
 	public undoAction(editorState:EditorState) {
         editorState.setTitle(this.oldTitle);
     }
+	public serialize() {
+		return this.serializedState;
+	}
 }
 class GrammarDelta implements UndoableDelta {
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.oldGrammarName = serializedState.oldGrammarName;
 		this.newGrammarName = serializedState.newGrammarName;
 		this.timestamp = serializedState.timestamp;
@@ -93,6 +102,7 @@ class GrammarDelta implements UndoableDelta {
 		const editorWrapper = editorState.getEditorWrapper();
 		editorWrapper.setGrammar(this.oldGrammarName);
     }
+	public serialize() { return this.serializedState; }
 }
 
 class EditChange implements UndoableDelta {
@@ -104,7 +114,7 @@ class EditChange implements UndoableDelta {
 	private newText:string;
 	private timestamp:number;
 	public getTimestamp():number { return this.timestamp; };
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.oldRange = serializedState.oldRange;
 		this.newRange = serializedState.newRange;
 		this.oldText = serializedState.oldText;
@@ -129,10 +139,11 @@ class EditChange implements UndoableDelta {
 		this.oldRange = editorWrapper.getCurrentAnchorPosition(this.oldRangeAnchor);
 		this.newRange = editorWrapper.getCurrentAnchorPosition(this.newRangeAnchor);
 	}
+	public serialize() { return this.serializedState; }
 }
 
 class EditDelta implements UndoableDelta {
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.timestamp = serializedState.timestamp;
 		this.changes = serializedState.changes.map((ss) => {
 			return new EditChange(ss);
@@ -156,10 +167,11 @@ class EditDelta implements UndoableDelta {
 			c.addAnchor(editorState);
 		});
 	}
+	public serialize() { return this.serializedState; }
 }
 
 class OpenDelta implements UndoableDelta {
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.grammarName = serializedState.grammarName;
 		this.title = serializedState.title;
 		this.timestamp = serializedState.timestamp;
@@ -185,9 +197,10 @@ class OpenDelta implements UndoableDelta {
 
 		editorWrapper.setText('');
 	}
+	public serialize() { return this.serializedState; }
 }
 class DestroyDelta implements UndoableDelta {
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.timestamp = serializedState.timestamp;
 	}
 	private timestamp:number;
@@ -198,9 +211,10 @@ class DestroyDelta implements UndoableDelta {
 	undoAction(editorState) {
 		editorState.isOpen = true;
 	}
+	public serialize() { return this.serializedState; }
 }
 class ModifiedDelta implements UndoableDelta {
-    constructor(serializedState) {
+    constructor(private serializedState) {
 		this.timestamp = serializedState.timestamp;
 		this.modified = serializedState.modified;
 		this.oldModified = serializedState.oldModified;
@@ -215,6 +229,7 @@ class ModifiedDelta implements UndoableDelta {
 	undoAction(editorState) {
 		editorState.modified = this.oldModified;
 	}
+	public serialize() { return this.serializedState; }
 }
 
 
@@ -237,20 +252,32 @@ export class EditorState {
 		this.editorID = state.id;
 		if(mustPerformChange) {
 			state.deltas.forEach((d) => {
-				this.addDelta(d);
+				this.addDelta(d, true);
 			});
 		}
 		state.cursors.forEach((c) => {
 
 		});
 	}
+	public serialize() {
+		return {
+			deltas: _.map(this.deltas, d => d.serialize() ),
+			isOpen: this.isOpen,
+			id: this.editorID,
+			title: this.title,
+			modified: this.modified,
+			remoteCursors: this.remoteCursors.serialize()
+		}
+	};
 	public getEditorWrapper() { return this.editorWrapper; };
+	public getTitle():string { return this.title; };
 	public setTitle(newTitle:string) { this.title = newTitle; };
 	public setIsOpen(val:boolean) { this.isOpen = val; };
 	public getIsOpen(val:boolean) { return this.isOpen; };
 	public getRemoteCursors():RemoteCursorMarker { return this.remoteCursors; };
 	public getEditorID():number { return this.editorID; };
-	public addDelta(serializedDelta, mustPerformChange=true) {
+	public getIsModified():boolean { return this.modified; };
+	public addDelta(serializedDelta, mustPerformChange:boolean) {
 		const {type} = serializedDelta;
 		let delta;
 
@@ -274,7 +301,7 @@ export class EditorState {
 			this.handleDelta(delta, mustPerformChange);
 		}
 	}
-	private handleDelta(delta, mustPerformChange) {
+	private handleDelta(delta, mustPerformChange:boolean) {
 		if(delta instanceof EditDelta) {
 			delta.addAnchors(this);
 		}
@@ -314,10 +341,10 @@ export class EditorStateTracker {
     private editorStates:{[editorID:number]: EditorState} = {};
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService) {
 	}
-	public handleEvent(event) {
+	public handleEvent(event, mustPerformChange:boolean) {
 		const editorState = this.getEditorState(event.id);
 		if(editorState) {
-			editorState.addDelta(event);
+			editorState.addDelta(event, mustPerformChange);
 		}
 	};
 	public getEditorState(editorID:number):EditorState {
@@ -328,18 +355,19 @@ export class EditorStateTracker {
         }
 	}
 	public getActiveEditors():Array<EditorState> {
-		const rv = _.filter(this.editorStates, (s) => {
-			return s.getIsOpen();
-		});
+		const rv = _.filter(this.editorStates, s => s.getIsOpen());
 		return rv;
 	}
 	public onEditorOpened(state, mustPerformChange:boolean) {
-		const editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
-		this.editorStates[state.id] = editorState;
-		console.log(this.editorStates);
+		let editorState = this.getEditorState(state.id);
+		if(!editorState) {
+			editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
+			this.editorStates[state.id] = editorState;
+		}
+		editorState.addDelta(state, mustPerformChange); //open event
 		return editorState;
 	}
 	public serializeEditorStates() {
-
+		return _.mapObject(this.editorStates, editorState => editorState.serialize());
 	};
 }

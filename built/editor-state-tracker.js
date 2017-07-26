@@ -39,10 +39,16 @@ class RemoteCursorMarker extends events_1.EventEmitter {
     getCursors() {
         return this.cursors;
     }
+    serialize() {
+        return {
+            cursors: this.cursors
+        };
+    }
 }
 exports.RemoteCursorMarker = RemoteCursorMarker;
 class TitleDelta {
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.oldTitle = serializedState.oldTitle;
         this.newTitle = serializedState.newTitle;
         this.timestamp = serializedState.timestamp;
@@ -55,9 +61,13 @@ class TitleDelta {
     undoAction(editorState) {
         editorState.setTitle(this.oldTitle);
     }
+    serialize() {
+        return this.serializedState;
+    }
 }
 class GrammarDelta {
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.oldGrammarName = serializedState.oldGrammarName;
         this.newGrammarName = serializedState.newGrammarName;
         this.timestamp = serializedState.timestamp;
@@ -72,16 +82,18 @@ class GrammarDelta {
         const editorWrapper = editorState.getEditorWrapper();
         editorWrapper.setGrammar(this.oldGrammarName);
     }
+    serialize() { return this.serializedState; }
 }
 class EditChange {
-    getTimestamp() { return this.timestamp; }
-    ;
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.oldRange = serializedState.oldRange;
         this.newRange = serializedState.newRange;
         this.oldText = serializedState.oldText;
         this.newText = serializedState.newText;
     }
+    getTimestamp() { return this.timestamp; }
+    ;
     doAction(editorState) {
         const editorWrapper = editorState.getEditorWrapper();
         this.updateRanges(editorState);
@@ -101,9 +113,11 @@ class EditChange {
         this.oldRange = editorWrapper.getCurrentAnchorPosition(this.oldRangeAnchor);
         this.newRange = editorWrapper.getCurrentAnchorPosition(this.newRangeAnchor);
     }
+    serialize() { return this.serializedState; }
 }
 class EditDelta {
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.timestamp = serializedState.timestamp;
         this.changes = serializedState.changes.map((ss) => {
             return new EditChange(ss);
@@ -126,9 +140,11 @@ class EditDelta {
             c.addAnchor(editorState);
         });
     }
+    serialize() { return this.serializedState; }
 }
 class OpenDelta {
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.grammarName = serializedState.grammarName;
         this.title = serializedState.title;
         this.timestamp = serializedState.timestamp;
@@ -149,9 +165,11 @@ class OpenDelta {
         editorState.isOpen = false;
         editorWrapper.setText('');
     }
+    serialize() { return this.serializedState; }
 }
 class DestroyDelta {
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.timestamp = serializedState.timestamp;
     }
     getTimestamp() { return this.timestamp; }
@@ -162,9 +180,11 @@ class DestroyDelta {
     undoAction(editorState) {
         editorState.isOpen = true;
     }
+    serialize() { return this.serializedState; }
 }
 class ModifiedDelta {
     constructor(serializedState) {
+        this.serializedState = serializedState;
         this.timestamp = serializedState.timestamp;
         this.modified = serializedState.modified;
         this.oldModified = serializedState.oldModified;
@@ -177,6 +197,7 @@ class ModifiedDelta {
     undoAction(editorState) {
         editorState.modified = this.oldModified;
     }
+    serialize() { return this.serializedState; }
 }
 class EditorState {
     constructor(suppliedState, editorWrapper, mustPerformChange) {
@@ -193,13 +214,26 @@ class EditorState {
         this.editorID = state.id;
         if (mustPerformChange) {
             state.deltas.forEach((d) => {
-                this.addDelta(d);
+                this.addDelta(d, true);
             });
         }
         state.cursors.forEach((c) => {
         });
     }
+    serialize() {
+        return {
+            deltas: _.map(this.deltas, d => d.serialize()),
+            isOpen: this.isOpen,
+            id: this.editorID,
+            title: this.title,
+            modified: this.modified,
+            remoteCursors: this.remoteCursors.serialize()
+        };
+    }
+    ;
     getEditorWrapper() { return this.editorWrapper; }
+    ;
+    getTitle() { return this.title; }
     ;
     setTitle(newTitle) { this.title = newTitle; }
     ;
@@ -211,7 +245,9 @@ class EditorState {
     ;
     getEditorID() { return this.editorID; }
     ;
-    addDelta(serializedDelta, mustPerformChange = true) {
+    getIsModified() { return this.modified; }
+    ;
+    addDelta(serializedDelta, mustPerformChange) {
         const { type } = serializedDelta;
         let delta;
         if (type === 'open') {
@@ -281,10 +317,10 @@ class EditorStateTracker {
         this.channelCommunicationService = channelCommunicationService;
         this.editorStates = {};
     }
-    handleEvent(event) {
+    handleEvent(event, mustPerformChange) {
         const editorState = this.getEditorState(event.id);
         if (editorState) {
-            editorState.addDelta(event);
+            editorState.addDelta(event, mustPerformChange);
         }
     }
     ;
@@ -297,18 +333,20 @@ class EditorStateTracker {
         }
     }
     getActiveEditors() {
-        const rv = _.filter(this.editorStates, (s) => {
-            return s.getIsOpen();
-        });
+        const rv = _.filter(this.editorStates, s => s.getIsOpen());
         return rv;
     }
     onEditorOpened(state, mustPerformChange) {
-        const editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
-        this.editorStates[state.id] = editorState;
-        console.log(this.editorStates);
+        let editorState = this.getEditorState(state.id);
+        if (!editorState) {
+            editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
+            this.editorStates[state.id] = editorState;
+        }
+        editorState.addDelta(state, mustPerformChange); //open event
         return editorState;
     }
     serializeEditorStates() {
+        return _.mapObject(this.editorStates, editorState => editorState.serialize());
     }
     ;
 }
