@@ -166,6 +166,7 @@ export class ChannelCommunicationService extends EventEmitter {
             }
         });
         this.commLayer.onMemberRemoved(this.channelName, (member) => {
+            this.editorStateTracker.removeUserCursors(member);
             this.userList.remove(member.id);
         });
     }

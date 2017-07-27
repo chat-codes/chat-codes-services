@@ -34,6 +34,7 @@ class RemoteCursorMarker extends events_1.EventEmitter {
     removeCursor(id, user) {
         if (this.cursors[id]) {
             this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors[id], this);
+            delete this.cursors[id];
         }
     }
     getCursors() {
@@ -43,6 +44,13 @@ class RemoteCursorMarker extends events_1.EventEmitter {
         return {
             cursors: this.cursors
         };
+    }
+    removeUserCursors(user) {
+        _.each(this.cursors, (cursor, id) => {
+            if (cursor.user.id === user.id) {
+                this.removeCursor(id, user);
+            }
+        });
     }
 }
 exports.RemoteCursorMarker = RemoteCursorMarker;
@@ -309,6 +317,9 @@ class EditorState {
     undoDelta(d) {
         d.undoAction(this);
     }
+    removeUserCursors(user) {
+        this.remoteCursors.removeUserCursors(user);
+    }
 }
 exports.EditorState = EditorState;
 class EditorStateTracker {
@@ -342,13 +353,18 @@ class EditorStateTracker {
             editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
             this.editorStates[state.id] = editorState;
         }
-        editorState.addDelta(state, mustPerformChange); //open event
+        // editorState.addDelta(state, mustPerformChange); //open event
         return editorState;
     }
     serializeEditorStates() {
         return _.mapObject(this.editorStates, editorState => editorState.serialize());
     }
     ;
+    removeUserCursors(user) {
+        _.each(this.editorStates, (es) => {
+            es.removeUserCursors(user);
+        });
+    }
 }
 exports.EditorStateTracker = EditorStateTracker;
 //# sourceMappingURL=editor-state-tracker.js.map
