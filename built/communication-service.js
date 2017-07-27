@@ -11,7 +11,7 @@ function generateChannelName(commLayer) {
     const fs = require('fs');
     const path = require('path');
     if (DEBUG) {
-        return Promise.resolve('c2');
+        return Promise.resolve('example_channel');
     }
     else {
         const WORD_FILE_NAME = 'google-10000-english-usa-no-swears-medium.txt';
@@ -64,9 +64,6 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.messageGroups = new chat_messages_1.MessageGroups(this.userList);
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this);
         this.commLayer = commService.commLayer;
-        this.commLayer.bind(this.channelName, 'terminal-data', (event) => {
-            this.emit('terminal-data', event);
-        });
         this.commLayer.bind(this.channelName, 'message', (data) => {
             this.messageGroups.addMessage(data);
             this.emit('message', _.extend({
@@ -145,6 +142,9 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         });
         this.commLayer.bind(this.channelName, 'write-to-terminal', (data) => {
             this.emit('write-to-terminal', data);
+        });
+        this.commLayer.bind(this.channelName, 'terminal-data', (event) => {
+            this.emit('terminal-data', event);
         });
         this.commLayer.getMembers(this.channelName).then((memberInfo) => {
             this.myID = memberInfo.myID;
