@@ -276,6 +276,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
     getTimestamp() {
         return new Date().getTime();
     }
+    ;
 }
 exports.ChannelCommunicationService = ChannelCommunicationService;
 class CommunicationService {

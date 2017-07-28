@@ -9,7 +9,7 @@ declare var __dirname:string;
 
 const DEBUG = true;
 
-function generateChannelName(commLayer) {
+function generateChannelName(commLayer):Promise<string> {
     const fs = require('fs');
     const path = require('path');
     if(DEBUG) {
@@ -294,7 +294,7 @@ export class ChannelCommunicationService extends EventEmitter {
     private myID:string;
     private getTimestamp():number {
         return new Date().getTime();
-    }
+    };
 }
 export class CommunicationService {
     constructor(public isRoot:boolean, username:string, key:string, cluster:string, private EditorWrapperClass) {
