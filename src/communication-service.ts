@@ -9,7 +9,7 @@ import { EditorStateTracker } from './editor-state-tracker';
 declare function require(name:string);
 declare var __dirname:string;
 
-const DEBUG = true;
+const DEBUG = false;
 
 
 /**
@@ -238,6 +238,11 @@ export class ChannelCommunicationService extends EventEmitter {
             timestamp: this.getTimestamp()
         }, data));
     }
+
+    /**
+     * Called when the user opens a new editor window
+     * @param {[type]} data Information about the editor
+     */
     public emitEditorOpened(data):void {
 		const editorState = this.editorStateTracker.onEditorOpened(data, true);
         this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
@@ -245,6 +250,10 @@ export class ChannelCommunicationService extends EventEmitter {
         }, data));
     }
 
+    /**
+     * Send chat message
+     * @param {string} message The text of the message to send
+     */
     public sendTextMessage(message:string):void {
         const data = {
             uid: this.myID,
@@ -255,11 +264,19 @@ export class ChannelCommunicationService extends EventEmitter {
         this.messageGroups.addMessage(data);
 
         this.commLayer.trigger(this.channelName, 'message', data);
-        
+
         (this as any).emit('message', _.extend({
             sender: this.userList.getMe()
         }, data));
     }
+
+    /**
+     * Update typing status to either:
+     * - 'IDLE' - The user is not typing anything
+     * - 'ACTIVE_TYPING' - The user is actively typing
+     * - 'IDLE_TYPED' - The user typed something but hasn't sent it or updated for a while
+     * @param {string} status IDLE, ACTIVE_TYPING, or IDLE_TYPED
+     */
     public sendTypingStatus(status:string):void {
         const data = {
             uid: this.myID,
@@ -279,6 +296,12 @@ export class ChannelCommunicationService extends EventEmitter {
             meUser.setTypingStatus(status);
         }
     }
+
+    /**
+     * The user modified something in the editor
+     * @param {[type]} delta       The change
+     * @param {[type]} remote=true whether the change was made by a remote client or on the editor
+     */
     public emitEditorChanged(delta, remote=true):void {
 		this.editorStateTracker.handleEvent(delta, false);
         this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
@@ -288,6 +311,11 @@ export class ChannelCommunicationService extends EventEmitter {
 		}, delta));
     }
 
+    /**
+     * The cursor position for the user changed
+     * @param {[type]} delta       Information about the cursor position
+     * @param {[type]} remote=true Whether this was from a remote user
+     */
     public emitCursorPositionChanged(delta, remote=true):void {
         this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
 			timestamp: this.getTimestamp(),
@@ -295,6 +323,12 @@ export class ChannelCommunicationService extends EventEmitter {
 			remote: remote
 		}, delta));
     }
+
+    /**
+     * The selected content for the user has changed
+     * @param {[type]} delta       Information about the selection
+     * @param {[type]} remote=true Whether this was from a remote user
+     */
     public emitCursorSelectionChanged(delta, remote=true):void {
         this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
 			timestamp: this.getTimestamp(),
@@ -302,6 +336,12 @@ export class ChannelCommunicationService extends EventEmitter {
 			remote: remote
 		}, delta));
     }
+
+    /**
+     * Called when the terminal outputs something
+     * @param {[type]} data         Information about what the terminal outputted
+     * @param {[type]} remote=false Whether this was outputted by a remote client
+     */
     public emitTerminalData(data, remote=false):void {
         this.commLayer.trigger(this.channelName, 'terminal-data', {
 			timestamp: this.getTimestamp(),
@@ -328,6 +368,10 @@ export class ChannelCommunicationService extends EventEmitter {
         });
     }
 
+    /**
+     * Sends the complete history of chat messages
+     * @param {[type]} forUser The user for whom this history is intended
+     */
     public sendMessageHistory(forUser):void {
         this.commLayer.trigger(this.channelName, 'message-history', {
             history: this.messageGroups.getMessageHistory(),
@@ -355,10 +399,11 @@ export class ChannelCommunicationService extends EventEmitter {
 
 /* A class to create and manage ChannelCommunicationService instances */
 export class CommunicationService {
-    constructor(public isRoot:boolean, username:string, key:string, cluster:string, private EditorWrapperClass) {
-        this.commLayer = new PusherCommunicationLayer({
-            username: username
-        }, key, cluster);
+    constructor(public isRoot:boolean, authInfo, private EditorWrapperClass) {
+        this.commLayer = new PusherCommunicationLayer(authInfo);
+        // {
+        //     username: username
+        // }, key, cluster);
     }
     public commLayer:PusherCommunicationLayer; // The underlying communication mechanism
     private clients:{[channelName:string]:ChannelCommunicationService} = {}; // Maps channel names to channel comms

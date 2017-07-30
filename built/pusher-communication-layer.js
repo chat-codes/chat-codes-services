@@ -78,7 +78,7 @@ class PusherCommunicationLayer {
      * @param  {string} key      The pusher API key
      * @param  {string} cluster  The pusher cluster name (example: 'us2')
      */
-    constructor(authInfo, key, cluster) {
+    constructor(authInfo) {
         this.awaitingMessage = {}; // A queue to help manage messages that are split into multiple messages
         this.messageQueues = {}; // A backlog of messages to send
         this.channels = {}; // Pusher clients for every channel
@@ -87,8 +87,8 @@ class PusherCommunicationLayer {
         this.combinedEventMessageName = 'm'; // The type of message to use internally
         this.SIZE_THRESHOLD = 1000; // The maximum number of characters to contain in a message
         this.EMIT_RATE = 200; // The minimum amount of time (in ms) to wait between messages
-        this.pusher = new Pusher(key, {
-            cluster: cluster,
+        this.pusher = new Pusher(authInfo.key, {
+            cluster: authInfo.cluster,
             encrypted: true,
             authEndpoint: getAuthURL(authInfo.username)
         });

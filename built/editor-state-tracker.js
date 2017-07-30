@@ -2,7 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
-// import {RemoteCursorMarker} from './remote_cursor_marker';
+/*
+ * Tracks a set of remote cursors.
+ */
 class RemoteCursorMarker extends events_1.EventEmitter {
     constructor(editorState) {
         super();
@@ -10,24 +12,32 @@ class RemoteCursorMarker extends events_1.EventEmitter {
         this.cursors = {};
     }
     updateCursor(id, user, pos) {
-        if (this.cursors[id]) {
-            this.cursors[id].pos = pos;
+        if (!this.cursors[id]) {
+            this.cursors[id] = { id: id, user: user };
+            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
+        }
+        let oldPos = this.cursors[id].pos;
+        this.cursors[id].pos = pos;
+        if (oldPos) {
             this.editorState.getEditorWrapper().updateRemoteCursorPosition(this.cursors[id], this);
         }
         else {
-            this.cursors[id] = { id: id, user: user, pos: pos };
-            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
+            this.editorState.getEditorWrapper().addRemoteCursorPosition(this.cursors[id], this);
         }
     }
     ;
     updateSelection(id, user, range) {
-        if (this.cursors[id]) {
-            this.cursors[id].range = range;
+        if (!this.cursors[id]) {
+            this.cursors[id] = { id: id, user: user };
+            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
+        }
+        let oldRange = this.cursors[id].range;
+        this.cursors[id].range = range;
+        if (oldRange) {
             this.editorState.getEditorWrapper().updateRemoteCursorSelection(this.cursors[id], this);
         }
         else {
-            this.cursors[id] = { id: id, user: user, range: range };
-            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
+            this.editorState.getEditorWrapper().addRemoteCursorSelection(this.cursors[id], this);
         }
     }
     ;
@@ -55,6 +65,9 @@ class RemoteCursorMarker extends events_1.EventEmitter {
 }
 exports.RemoteCursorMarker = RemoteCursorMarker;
 class TitleDelta {
+    /**
+     * Represents a change where the title of the editor window has changed
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.oldTitle = serializedState.oldTitle;
@@ -74,6 +87,9 @@ class TitleDelta {
     }
 }
 class GrammarDelta {
+    /**
+     * Represents a change where the grammar (think of syntax highlighting rules) has changed
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.oldGrammarName = serializedState.oldGrammarName;
@@ -93,6 +109,9 @@ class GrammarDelta {
     serialize() { return this.serializedState; }
 }
 class EditChange {
+    /**
+     * Represents a change where text has been edited
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.oldRange = serializedState.oldRange;
@@ -124,6 +143,10 @@ class EditChange {
     serialize() { return this.serializedState; }
 }
 class EditDelta {
+    /**
+     * Represents a change made to the text of a document. Contains a series of EditChange
+     * objects representing the individual changes
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.timestamp = serializedState.timestamp;
@@ -151,6 +174,9 @@ class EditDelta {
     serialize() { return this.serializedState; }
 }
 class OpenDelta {
+    /**
+     * Represents a new text editor being opened
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.grammarName = serializedState.grammarName;
@@ -176,6 +202,9 @@ class OpenDelta {
     serialize() { return this.serializedState; }
 }
 class DestroyDelta {
+    /**
+     * Represents a text editor being closed.
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.timestamp = serializedState.timestamp;
@@ -191,6 +220,10 @@ class DestroyDelta {
     serialize() { return this.serializedState; }
 }
 class ModifiedDelta {
+    /**
+     * Represents a change to the *modified* flag (which marks if a file has been changed
+     * without having been saved)
+     */
     constructor(serializedState) {
         this.serializedState = serializedState;
         this.timestamp = serializedState.timestamp;
@@ -239,15 +272,15 @@ class EditorState {
         };
     }
     ;
-    getEditorWrapper() { return this.editorWrapper; }
-    ;
-    getTitle() { return this.title; }
-    ;
     setTitle(newTitle) { this.title = newTitle; }
     ;
     setIsOpen(val) { this.isOpen = val; }
     ;
-    getIsOpen(val) { return this.isOpen; }
+    getEditorWrapper() { return this.editorWrapper; }
+    ;
+    getTitle() { return this.title; }
+    ;
+    getIsOpen() { return this.isOpen; }
     ;
     getRemoteCursors() { return this.remoteCursors; }
     ;
@@ -277,45 +310,45 @@ class EditorState {
             delta = new DestroyDelta(serializedDelta);
         }
         else {
+            delta = null;
             console.log(serializedDelta);
         }
         if (delta) {
             this.handleDelta(delta, mustPerformChange);
         }
+        return delta;
     }
     handleDelta(delta, mustPerformChange) {
+        //A simplified operational transformation insertion
         if (delta instanceof EditDelta) {
             delta.addAnchors(this);
         }
+        //Go back and undo any deltas that should have been done after this delta
         let i = this.deltas.length - 1;
         let d;
         for (; i >= 0; i--) {
             d = this.deltas[i];
             if (d.getTimestamp() > delta.getTimestamp()) {
-                this.undoDelta(d);
+                d.undoAction(this);
             }
             else {
                 break;
             }
         }
+        // Insert this delta where it should be
         const insertAt = i + 1;
         this.deltas.splice(insertAt, 0, delta);
         if (mustPerformChange) {
-            i = insertAt;
+            i = insertAt; // will include this delta as we move forward
         }
         else {
             i = insertAt + 1;
         }
+        // Go forward and do allof the deltas that come before.
         for (; i < this.deltas.length; i++) {
             d = this.deltas[i];
-            this.doDelta(d);
+            d.doAction(this);
         }
-    }
-    doDelta(d) {
-        d.doAction(this);
-    }
-    undoDelta(d) {
-        d.undoAction(this);
     }
     removeUserCursors(user) {
         this.remoteCursors.removeUserCursors(user);
@@ -353,7 +386,6 @@ class EditorStateTracker {
             editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
             this.editorStates[state.id] = editorState;
         }
-        // editorState.addDelta(state, mustPerformChange); //open event
         return editorState;
     }
     serializeEditorStates() {

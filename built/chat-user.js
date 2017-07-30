@@ -2,11 +2,50 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
+/*
+ * Represents a single chat user
+ */
+class ChatUser extends events_1.EventEmitter {
+    /**
+     * constructor
+     * @param  {boolean} isMe       Whether the user is me or not
+     * @param  {string}  id         The unique id
+     * @param  {string}  name       The display name
+     * @param  {boolean} active     Whether this user is currently in the channel
+     * @param  {number}  colorIndex The user's color
+     */
+    constructor(isMe, id, name, active, colorIndex) {
+        super();
+        this.isMe = isMe;
+        this.id = id;
+        this.name = name;
+        this.active = active;
+        this.colorIndex = colorIndex;
+        this.typingStatus = 'IDLE';
+    }
+    setTypingStatus(status) {
+        this.typingStatus = status;
+        this.emit('typingStatus', {
+            status: status
+        });
+    }
+    serialize() {
+        return {
+            id: this.id,
+            name: this.name,
+            typingStatus: this.typingStatus,
+            active: this.active
+        };
+    }
+}
+exports.ChatUser = ChatUser;
 class ChatUserList extends events_1.EventEmitter {
     constructor() {
         super();
         this.activeUsers = [];
         this.allUsers = [];
+        this.current_user_color = 2;
+        this.numColors = 4;
     }
     getUsers() {
         return this.activeUsers;
@@ -18,9 +57,11 @@ class ChatUserList extends events_1.EventEmitter {
         });
     }
     add(isMe, id, name, active = true) {
-        var user = this.hasUser(id);
-        if (!user) {
-            user = new ChatUser(isMe, id, name, active);
+        let user = this.getUser(id);
+        if (user === null) {
+            const colorIndex = isMe ? 1 : this.current_user_color;
+            this.current_user_color = 2 + ((this.current_user_color + 1) % this.numColors);
+            user = new ChatUser(isMe, id, name, active, colorIndex);
             if (active) {
                 this.activeUsers.push(user);
             }
@@ -32,14 +73,12 @@ class ChatUserList extends events_1.EventEmitter {
         return user;
     }
     hasUser(id) {
-        for (var i = 0; i < this.allUsers.length; i++) {
-            var id_i = this.allUsers[i].id;
-            if (id_i === id) {
-                return this.allUsers[i];
-            }
-        }
-        return false;
+        return this.getUser(id) !== null;
     }
+    /**
+     * Remove a user from the list of users
+     * @param {string} id The user's ID
+     */
     remove(id) {
         for (var i = 0; i < this.activeUsers.length; i++) {
             var id_i = this.activeUsers[i].id;
@@ -75,33 +114,4 @@ class ChatUserList extends events_1.EventEmitter {
     }
 }
 exports.ChatUserList = ChatUserList;
-let current_user_color = 2;
-class ChatUser extends events_1.EventEmitter {
-    constructor(isMe, id, name, active) {
-        super();
-        this.isMe = isMe;
-        this.id = id;
-        this.name = name;
-        this.active = active;
-        this.numColors = 4;
-        this.typingStatus = 'IDLE';
-        this.colorIndex = isMe ? 1 : current_user_color;
-        current_user_color = 2 + ((current_user_color + 1) % this.numColors);
-    }
-    setTypingStatus(status) {
-        this.typingStatus = status;
-        this.emit('typingStatus', {
-            status: status
-        });
-    }
-    serialize() {
-        return {
-            id: this.id,
-            name: this.name,
-            typingStatus: this.typingStatus,
-            active: this.active
-        };
-    }
-}
-exports.ChatUser = ChatUser;
 //# sourceMappingURL=chat-user.js.map

@@ -83,9 +83,9 @@ export class PusherCommunicationLayer {
 	 * @param  {string} key      The pusher API key
 	 * @param  {string} cluster  The pusher cluster name (example: 'us2')
 	 */
-	constructor(authInfo, key:string, cluster:string) {
-		this.pusher = new Pusher(key, {
-			cluster: cluster,
+	constructor(authInfo) {
+		this.pusher = new Pusher(authInfo.key, {
+			cluster: authInfo.cluster,
 			encrypted: true,
 			authEndpoint: getAuthURL(authInfo.username)
 		});
