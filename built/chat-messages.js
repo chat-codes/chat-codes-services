@@ -6,20 +6,29 @@ const events_1 = require("events");
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
  */
+console.log('abc');
 class MessageGroup extends events_1.EventEmitter {
     constructor(sender, timestamp, messages) {
         super();
         this.sender = sender;
         this.timestamp = timestamp;
         this.messages = [];
-        this.messages.push.apply(this.messages, messages);
+        this.doAddMessage.apply(this, messages);
     }
+    doAddMessage(...messages) {
+        _.each(messages, (message) => {
+            console.log(message);
+            this.messages.push(message);
+        });
+    }
+    ;
     addMessage(message) {
-        this.messages.push(message);
+        this.doAddMessage(message);
         this.emit('message-added', {
             message: message
         });
     }
+    ;
     getSender() { return this.sender; }
     getTimestamp() { return this.timestamp; }
     getMessages() { return this.messages; }

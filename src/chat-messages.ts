@@ -7,19 +7,26 @@ import { EventEmitter } from 'events';
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
  */
+ console.log('abc');
 export class MessageGroup extends EventEmitter {
 	constructor(private sender:ChatUser, private timestamp:number, messages: Array<any>) {
 		super();
-		this.messages.push.apply(this.messages, messages);
+		this.doAddMessage.apply(this, messages);
 	}
 
 	private messages: Array<any> = [];
+	private doAddMessage(...messages):void {
+		_.each(messages, (message) => {
+			console.log(message);
+			this.messages.push(message);
+		});
+	};
 	public addMessage(message) {
-		this.messages.push(message);
+		this.doAddMessage(message);
 		(this as any).emit('message-added', {
 			message: message
 		});
-	}
+	};
 	public getSender():ChatUser { return this.sender; }
 	public getTimestamp() { return this.timestamp; }
 	public getMessages():Array<any> { return this.messages; }
