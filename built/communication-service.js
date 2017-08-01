@@ -6,7 +6,7 @@ const pusher_communication_layer_1 = require("./pusher-communication-layer");
 const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
-const DEBUG = false;
+const DEBUG = true;
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
  * numbers to the channel name
@@ -73,8 +73,8 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commService = commService;
         this.channelName = channelName;
         this.userList = new chat_user_1.ChatUserList(); // A list of chat userList
-        this.messageGroups = new chat_messages_1.MessageGroups(this.userList); // A list of message groups
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this);
+        this.messageGroups = new chat_messages_1.MessageGroups(this.userList, this.editorStateTracker);
         this.commLayer = commService.commLayer; // Pop this object up a level
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
@@ -271,7 +271,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     emitEditorChanged(delta, remote = true) {
-        this.editorStateTracker.handleEvent(delta, false);
+        this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
         this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
             timestamp: this.getTimestamp(),
             uid: this.myID,

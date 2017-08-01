@@ -1,7 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
+const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
+;
 /*
  * Tracks a set of remote cursors.
  */
@@ -288,6 +290,15 @@ class EditorState {
     ;
     getIsModified() { return this.modified; }
     ;
+    addHighlight(range) {
+        return this.getEditorWrapper().addHighlight(range);
+    }
+    removeHighlight(highlightID) {
+        return this.getEditorWrapper().removeHighlight(highlightID);
+    }
+    focus(range) {
+        return this.getEditorWrapper().focus(range);
+    }
     addDelta(serializedDelta, mustPerformChange) {
         const { type } = serializedDelta;
         let delta;
@@ -361,6 +372,9 @@ class EditorStateTracker {
         this.channelCommunicationService = channelCommunicationService;
         this.editorStates = {};
     }
+    getAllEditors() {
+        return _.values(this.editorStates);
+    }
     handleEvent(event, mustPerformChange) {
         const editorState = this.getEditorState(event.id);
         if (editorState) {
@@ -377,7 +391,7 @@ class EditorStateTracker {
         }
     }
     getActiveEditors() {
-        const rv = _.filter(this.editorStates, s => s.getIsOpen());
+        const rv = _.filter(this.getAllEditors(), s => s.getIsOpen());
         return rv;
     }
     onEditorOpened(state, mustPerformChange) {
@@ -396,6 +410,49 @@ class EditorStateTracker {
         _.each(this.editorStates, (es) => {
             es.removeUserCursors(user);
         });
+    }
+    addHighlight(editorID, range) {
+        editorID = this.getAllEditors()[0].getEditorID();
+        const editorState = this.getEditorState(editorID);
+        if (editorState) {
+            return editorState.addHighlight(range);
+        }
+        else {
+            return -1;
+        }
+    }
+    removeHighlight(editorID, hightlightID) {
+        editorID = this.getAllEditors()[0].getEditorID();
+        const editorState = this.getEditorState(editorID);
+        if (editorState) {
+            return editorState.removeHighlight(hightlightID);
+        }
+        else {
+            return false;
+        }
+    }
+    focus(editorID, range) {
+        editorID = this.getAllEditors()[0].getEditorID();
+        const editorState = this.getEditorState(editorID);
+        if (editorState) {
+            return editorState.focus(range);
+        }
+        else {
+            return false;
+        }
+    }
+    fuzzyMatch(query) {
+        const editors = this.getAllEditors();
+        const editorTitleSet = new FuzzySet(_.map(editors, (e) => e.getTitle()));
+        const matches = editorTitleSet.get(query);
+        if (matches) {
+            const bestTitleMatch = matches[0][1];
+            const matchingTitles = _.filter(this.getAllEditors(), (es) => es.getTitle() === bestTitleMatch);
+            if (matchingTitles.length > 0) {
+                return matchingTitles[0];
+            }
+        }
+        return null;
     }
 }
 exports.EditorStateTracker = EditorStateTracker;

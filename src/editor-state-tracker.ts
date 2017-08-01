@@ -1,7 +1,16 @@
 import * as _ from 'underscore';
+import * as FuzzySet from 'fuzzyset.js';
 import { EventEmitter } from 'events';
 import { ChannelCommunicationService } from './communication-service';
 
+interface SerializedRange {
+	start: Array<number>,
+	end: Array<number>
+};
+interface SerializedPos {
+	row: number,
+	column: number
+}
 /*
  * Tracks a set of remote cursors.
  */
@@ -10,7 +19,7 @@ export class RemoteCursorMarker extends EventEmitter {
 		super();
 	}
 	private cursors:{[cursorID:number]:any} = {};
-	public updateCursor(id, user, pos) {
+	public updateCursor(id, user, pos:SerializedPos) {
 		if(!this.cursors[id]) {
 			this.cursors[id] = { id: id, user: user };
 			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
@@ -25,7 +34,7 @@ export class RemoteCursorMarker extends EventEmitter {
 			this.editorState.getEditorWrapper().addRemoteCursorPosition(this.cursors[id], this);
 		}
 	};
-	public updateSelection(id, user, range) {
+	public updateSelection(id, user, range:SerializedRange) {
 		if(!this.cursors[id]) {
 			this.cursors[id] = { id: id, user: user };
 			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
@@ -79,6 +88,9 @@ interface EditorWrapper {
 	updateRemoteCursorPosition(cursor, remoteCursorMarker:RemoteCursorMarker);
 	updateRemoteCursorSelection(cursor, remoteCursorMarker:RemoteCursorMarker);
 	removeRemoteCursor(cursor, remoteCursorMarker:RemoteCursorMarker);
+    addHighlight(range:SerializedRange):number;
+    removeHighlight(highlightID:number);
+	focus(range:SerializedRange);
     saveFile();
 	serializeEditorStates();
 }
@@ -143,8 +155,8 @@ class GrammarDelta implements UndoableDelta {
 class EditChange implements UndoableDelta {
 	private oldRangeAnchor; // Anchors are important to keep track of where this change should be..
 	private newRangeAnchor; // ..in case any edits need to be inserted before this one
-	private oldRange;
-	private newRange;
+	private oldRange:SerializedRange;
+	private newRange:SerializedRange;
 	private oldText:string;
 	private newText:string;
 	private timestamp:number;
@@ -329,6 +341,15 @@ export class EditorState {
 	public getRemoteCursors():RemoteCursorMarker { return this.remoteCursors; };
 	public getEditorID():number { return this.editorID; };
 	public getIsModified():boolean { return this.modified; };
+	public addHighlight(range):number {
+		return this.getEditorWrapper().addHighlight(range);
+	}
+	public removeHighlight(highlightID:number):boolean {
+		return this.getEditorWrapper().removeHighlight(highlightID);
+	}
+	public focus(range):boolean {
+		return this.getEditorWrapper().focus(range);
+	}
 
 	public addDelta(serializedDelta, mustPerformChange:boolean):UndoableDelta {
 		const {type} = serializedDelta;
@@ -400,6 +421,10 @@ export class EditorStateTracker {
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService) {
 	}
 
+	public getAllEditors():Array<EditorState> {
+		return _.values(this.editorStates);
+	}
+
 	public handleEvent(event, mustPerformChange:boolean) {
 		const editorState = this.getEditorState(event.id);
 		if(editorState) {
@@ -416,7 +441,7 @@ export class EditorStateTracker {
 	}
 
 	public getActiveEditors():Array<EditorState> {
-		const rv = _.filter(this.editorStates, s => s.getIsOpen());
+		const rv = _.filter(this.getAllEditors(), s => s.getIsOpen());
 		return rv;
 	}
 
@@ -437,5 +462,46 @@ export class EditorStateTracker {
 		_.each(this.editorStates, (es) => {
 			es.removeUserCursors(user);
 		});
+	}
+	public addHighlight(editorID:number, range:SerializedRange):number {
+		editorID = this.getAllEditors()[0].getEditorID();
+		const editorState:EditorState = this.getEditorState(editorID);
+		if(editorState) {
+			return editorState.addHighlight(range);
+		} else {
+			return -1;
+		}
+	}
+	public removeHighlight(editorID:number, hightlightID:number):boolean {
+		editorID = this.getAllEditors()[0].getEditorID();
+		const editorState:EditorState = this.getEditorState(editorID);
+		if(editorState) {
+			return editorState.removeHighlight(hightlightID);
+		} else {
+			return false;
+		}
+	}
+	public focus(editorID:number, range:SerializedRange):boolean {
+		editorID = this.getAllEditors()[0].getEditorID();
+		const editorState:EditorState = this.getEditorState(editorID);
+		if(editorState) {
+			return editorState.focus(range);
+		} else {
+			return false;
+		}
+	}
+	public fuzzyMatch(query:string):EditorState {
+		const editors = this.getAllEditors();
+		const editorTitleSet = new FuzzySet(_.map(editors, (e) => e.getTitle() ));
+		const matches = editorTitleSet.get(query);
+		if(matches) {
+			const bestTitleMatch = matches[0][1];
+			const matchingTitles = _.filter(this.getAllEditors(), (es) => es.getTitle() === bestTitleMatch);
+			if(matchingTitles.length > 0) {
+				return matchingTitles[0];
+			}
+		}
+
+		return null;
 	}
 }

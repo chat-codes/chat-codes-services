@@ -9,7 +9,7 @@ import { EditorStateTracker } from './editor-state-tracker';
 declare function require(name:string);
 declare var __dirname:string;
 
-const DEBUG = false;
+const DEBUG = true;
 
 
 /**
@@ -69,7 +69,7 @@ function generateChannelName(commLayer):Promise<string> {
 
 export class ChannelCommunicationService extends EventEmitter {
     public userList:ChatUserList = new ChatUserList(); // A list of chat userList
-    public messageGroups:MessageGroups = new MessageGroups(this.userList); // A list of message groups
+    public messageGroups:MessageGroups // A list of message groups
     public commLayer:PusherCommunicationLayer; // The communication channel
     public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
@@ -83,6 +83,7 @@ export class ChannelCommunicationService extends EventEmitter {
     constructor(private commService:CommunicationService, private channelName:string, EditorWrapperClass) {
         super();
         this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this);
+        this.messageGroups = new MessageGroups(this.userList, this.editorStateTracker);
 
         this.commLayer = commService.commLayer; // Pop this object up a level
 
@@ -303,7 +304,7 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     public emitEditorChanged(delta, remote=true):void {
-		this.editorStateTracker.handleEvent(delta, false);
+		this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
         this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
 			timestamp: this.getTimestamp(),
             uid: this.myID,

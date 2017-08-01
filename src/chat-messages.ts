@@ -1,13 +1,12 @@
 import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
+import { EditorStateTracker } from './editor-state-tracker';
 import { EventEmitter } from 'events';
-
 
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
  */
- console.log('abc');
 export class MessageGroup extends EventEmitter {
 	constructor(private sender:ChatUser, private timestamp:number, messages: Array<any>) {
 		super();
@@ -17,7 +16,6 @@ export class MessageGroup extends EventEmitter {
 	private messages: Array<any> = [];
 	private doAddMessage(...messages):void {
 		_.each(messages, (message) => {
-			console.log(message);
 			this.messages.push(message);
 		});
 	};
@@ -36,7 +34,7 @@ export class MessageGroup extends EventEmitter {
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
 export class MessageGroups extends EventEmitter {
-	constructor(private chatUserList:ChatUserList) {
+	constructor(private chatUserList:ChatUserList, private editorStateTracker:EditorStateTracker) {
 		super();
 	};
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
@@ -51,6 +49,12 @@ export class MessageGroups extends EventEmitter {
 
 		let lastMessageGroup = _.last(this.messageGroups);
 		let groupToAddTo = lastMessageGroup;
+
+		const editor = this.editorStateTracker.fuzzyMatch(data.message);
+		if(editor) {
+			const editorID = editor.getEditorID();
+			data.editorID = editorID;
+		}
 
 		if (!lastMessageGroup || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
 			// Add to a new group
