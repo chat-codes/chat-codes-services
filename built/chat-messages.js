@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
+const showdown = require("showdown");
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
@@ -12,10 +13,12 @@ class MessageGroup extends events_1.EventEmitter {
         this.sender = sender;
         this.timestamp = timestamp;
         this.messages = [];
+        this.converter = new showdown.Converter();
         this.doAddMessage.apply(this, messages);
     }
     doAddMessage(...messages) {
         _.each(messages, (message) => {
+            message.html = this.converter.makeHtml(message.message);
             this.messages.push(message);
         });
     }

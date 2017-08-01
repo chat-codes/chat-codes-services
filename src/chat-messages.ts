@@ -2,6 +2,7 @@ import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
 import { EditorStateTracker } from './editor-state-tracker';
 import { EventEmitter } from 'events';
+import * as showdown from 'showdown';
 
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
@@ -14,17 +15,23 @@ export class MessageGroup extends EventEmitter {
 	}
 
 	private messages: Array<any> = [];
+	private converter = new showdown.Converter();
+
 	private doAddMessage(...messages):void {
 		_.each(messages, (message) => {
+			message.html = this.converter.makeHtml(message.message);
 			this.messages.push(message);
 		});
 	};
+
 	public addMessage(message) {
 		this.doAddMessage(message);
 		(this as any).emit('message-added', {
 			message: message
 		});
 	};
+
+
 	public getSender():ChatUser { return this.sender; }
 	public getTimestamp() { return this.timestamp; }
 	public getMessages():Array<any> { return this.messages; }

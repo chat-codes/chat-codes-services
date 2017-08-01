@@ -7,6 +7,7 @@
     "@types/node": "^8.0.16",
     "fuzzyset.js": "0.0.4",
     "pusher-js": "^4.1.0",
+    "showdown": "^1.7.1",
     "underscore": "^1.8.3"
   },
   "devDependencies": {}
