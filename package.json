@@ -6,7 +6,8 @@
   "dependencies": {
     "pusher-js": "^4.1.0",
     "underscore": "^1.8.3",
-    "@types/node": "^8.0.16"
+    "@types/node": "^8.0.16",
+    "showdown": "^1.7.1"
   },
   "devDependencies": {}
 }
