@@ -412,7 +412,6 @@ class EditorStateTracker {
         });
     }
     addHighlight(editorID, range) {
-        editorID = this.getAllEditors()[0].getEditorID();
         const editorState = this.getEditorState(editorID);
         if (editorState) {
             return editorState.addHighlight(range);
@@ -421,18 +420,16 @@ class EditorStateTracker {
             return -1;
         }
     }
-    removeHighlight(editorID, hightlightID) {
-        editorID = this.getAllEditors()[0].getEditorID();
+    removeHighlight(editorID, highlightID) {
         const editorState = this.getEditorState(editorID);
         if (editorState) {
-            return editorState.removeHighlight(hightlightID);
+            return editorState.removeHighlight(highlightID);
         }
         else {
             return false;
         }
     }
     focus(editorID, range) {
-        editorID = this.getAllEditors()[0].getEditorID();
         const editorState = this.getEditorState(editorID);
         if (editorState) {
             return editorState.focus(range);

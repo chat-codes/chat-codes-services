@@ -56,11 +56,11 @@ class MessageGroups extends events_1.EventEmitter {
         this.messages.push(data);
         let lastMessageGroup = _.last(this.messageGroups);
         let groupToAddTo = lastMessageGroup;
-        const editor = this.editorStateTracker.fuzzyMatch(data.message);
-        if (editor) {
-            const editorID = editor.getEditorID();
-            data.editorID = editorID;
-        }
+        // const editor = this.editorStateTracker.fuzzyMatch(data.message);
+        // if(editor) {
+        // 	const editorID = editor.getEditorID();
+        // 	data.editorID = editorID;
+        // }
         if (!lastMessageGroup || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
             // Add to a new group
             const sender = this.chatUserList.getUser(data.uid);

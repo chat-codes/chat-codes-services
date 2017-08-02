@@ -464,7 +464,6 @@ export class EditorStateTracker {
 		});
 	}
 	public addHighlight(editorID:number, range:SerializedRange):number {
-		editorID = this.getAllEditors()[0].getEditorID();
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
 			return editorState.addHighlight(range);
@@ -472,17 +471,15 @@ export class EditorStateTracker {
 			return -1;
 		}
 	}
-	public removeHighlight(editorID:number, hightlightID:number):boolean {
-		editorID = this.getAllEditors()[0].getEditorID();
+	public removeHighlight(editorID:number, highlightID:number):boolean {
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
-			return editorState.removeHighlight(hightlightID);
+			return editorState.removeHighlight(highlightID);
 		} else {
 			return false;
 		}
 	}
 	public focus(editorID:number, range:SerializedRange):boolean {
-		editorID = this.getAllEditors()[0].getEditorID();
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
 			return editorState.focus(range);
