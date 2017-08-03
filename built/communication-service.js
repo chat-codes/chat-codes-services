@@ -76,6 +76,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this);
         this.messageGroups = new chat_messages_1.MessageGroups(this.userList, this.editorStateTracker);
         this.commLayer = commService.commLayer; // Pop this object up a level
+        window.cl = this;
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
             // Forward the message to the messageGroups tracker
@@ -271,12 +272,13 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     emitEditorChanged(delta, remote = true) {
-        this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
-        this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
+        _.extend(delta, {
             timestamp: this.getTimestamp(),
             uid: this.myID,
             remote: remote
-        }, delta));
+        });
+        this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
+        this.commLayer.trigger(this.channelName, 'editor-event', delta);
     }
     /**
      * The cursor position for the user changed

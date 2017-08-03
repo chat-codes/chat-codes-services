@@ -8,6 +8,7 @@ import { EditorStateTracker } from './editor-state-tracker';
 
 declare function require(name:string);
 declare var __dirname:string;
+declare var window;
 
 const DEBUG = true;
 
@@ -86,6 +87,8 @@ export class ChannelCommunicationService extends EventEmitter {
         this.messageGroups = new MessageGroups(this.userList, this.editorStateTracker);
 
         this.commLayer = commService.commLayer; // Pop this object up a level
+
+        window.cl = this;
 
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
@@ -304,12 +307,13 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     public emitEditorChanged(delta, remote=true):void {
-		this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
-        this.commLayer.trigger(this.channelName, 'editor-event', _.extend({
+        _.extend(delta, {
 			timestamp: this.getTimestamp(),
             uid: this.myID,
 			remote: remote
-		}, delta));
+        });
+		this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
+        this.commLayer.trigger(this.channelName, 'editor-event', delta);
     }
 
     /**

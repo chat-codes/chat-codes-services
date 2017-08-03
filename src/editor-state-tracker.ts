@@ -172,23 +172,20 @@ class EditChange implements UndoableDelta {
 	}
     public doAction(editorState:EditorState) {
 		const editorWrapper = editorState.getEditorWrapper();
-		this.updateRanges(editorState);
-		editorWrapper.replaceText(this.oldRange, this.newText);
+
+		const {oldText, newRange} = editorWrapper.replaceText(this.oldRange, this.newText);
+		this.newRange = newRange;
+		this.oldText = oldText;
+		// console.log("DO", JSON.stringify(this.oldRange), '"'+this.newText+'"');
     }
 	public undoAction(editorState:EditorState) {
 		const editorWrapper = editorState.getEditorWrapper();
-		editorWrapper.replaceText(this.newRange, this.oldText);
+
+		const {oldText, newRange} = editorWrapper.replaceText(this.newRange, this.oldText);
+		this.oldRange = newRange;
+		this.newText = oldText;
+		// console.log("UNDO", JSON.stringify(this.newRange), '"'+this.oldText+'"');
     }
-	public addAnchor(editorState:EditorState) {
-		const editorWrapper = editorState.getEditorWrapper();
-		this.oldRangeAnchor = editorWrapper.getAnchor(this.oldRange);
-		this.newRangeAnchor = editorWrapper.getAnchor(this.newRange);
-	}
-	public updateRanges(editorState:EditorState) {
-		const editorWrapper = editorState.getEditorWrapper();
-		this.oldRange = editorWrapper.getCurrentAnchorPosition(this.oldRangeAnchor);
-		this.newRange = editorWrapper.getCurrentAnchorPosition(this.newRangeAnchor);
-	}
 	public serialize() { return this.serializedState; }
 }
 
@@ -216,11 +213,6 @@ class EditDelta implements UndoableDelta {
 			c.undoAction(editorState);
 		});
     }
-	public addAnchors(editorState:EditorState) {
-		this.changes.forEach( (c) => {
-			c.addAnchor(editorState);
-		});
-	}
 	public serialize() { return this.serializedState; }
 }
 
@@ -379,11 +371,6 @@ export class EditorState {
 	}
 
 	private handleDelta(delta:UndoableDelta, mustPerformChange:boolean):void {
-		//A simplified operational transformation insertion
-		if(delta instanceof EditDelta) {
-			delta.addAnchors(this);
-		}
-
 		//Go back and undo any deltas that should have been done after this delta
 		let i = this.deltas.length-1;
 		let d;
