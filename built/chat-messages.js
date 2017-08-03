@@ -45,20 +45,20 @@ class MessageGroup extends events_1.EventEmitter {
                 _.each(aList, (a) => {
                     var dataInfoString = a.href;
                     var fileName = "None";
-                    if (dataInfoString.indexOf(":L") != -1 &&
-                        dataInfoString.indexOf("-L") != -1 &&
-                        dataInfoString.indexOf(":L") < dataInfoString.indexOf("-L")) {
-                        fileName = dataInfoString.substring(0, dataInfoString.indexOf(":L"));
-                        var dataStartInfo = dataInfoString.substring(dataInfoString.indexOf(":L") + 2, dataInfoString.indexOf("-L"));
-                        var dataEndInfo = dataInfoString.substring(dataInfoString.indexOf("-L") + 2);
+                    var lIndex1 = dataInfoString.indexOf(":L");
+                    var lIndex2 = dataInfoString.indexOf("-L");
+                    if (lIndex1 != -1 && lIndex2 != -1 && lIndex1 < lIndex2) {
+                        fileName = dataInfoString.substring(0, lIndex1);
+                        var dataStartInfo = dataInfoString.substring(lIndex1 + ":L".length, lIndex2);
+                        var dataEndInfo = dataInfoString.substring(lIndex2 + "-L".length);
                         a.href = "javascript:void(0)";
                         a.setAttribute("data-file", fileName);
                         a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
                         a.setAttribute("data-end", this.translatedataInfo(dataEndInfo));
                     }
-                    else if (dataInfoString.indexOf(":L") != -1) {
-                        fileName = dataInfoString.substring(0, dataInfoString.indexOf(":L"));
-                        var dataStartInfo = dataInfoString.substring(dataInfoString.indexOf(":L") + 2);
+                    else if (lIndex1 != -1) {
+                        fileName = dataInfoString.substring(0, lIndex1);
+                        var dataStartInfo = dataInfoString.substring(lIndex1 + ":L".length);
                         a.href = "javascript:void(0)";
                         a.setAttribute("data-file", fileName);
                         a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
