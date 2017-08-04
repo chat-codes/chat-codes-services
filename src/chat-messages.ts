@@ -17,9 +17,82 @@ export class MessageGroup extends EventEmitter {
 	private messages: Array<any> = [];
 	private converter = new showdown.Converter();
 
+	private getLinkDataInfo(html):String{
+		var htmlLatter = html.substring(html.indexOf("<a href=\"") + "<a href=\"".length);
+		var linkedDataInfo = htmlLatter.substring(htmlLatter.indexOf("\">")+2, htmlLatter.indexOf("</a>"));
+		return linkedDataInfo;
+	}
+
+	private translatedataInfo(dataInfo, dataLine, dataCol):void{
+		dataLine = -1;
+		dataCol = -1;
+		if(dataInfo.indexOf(",") != -1){
+			var splitted = dataInfo.split("," , 2);
+			dataLine = Number(splitted[0]);
+			dataCol = Number(splitted[1]);
+
+		}else{
+			dataLine = Number(dataInfo);
+		}
+		console.log(dataLine);
+		console.log(dataCol);
+	}
+
 	private doAddMessage(...messages):void {
 		_.each(messages, (message) => {
 			message.html = this.converter.makeHtml(message.message);
+			var html = message.html;
+
+      var fileName = "None";
+			var dataStartLine = -1;  var dataStartCol = -1;
+			var dataEndLine = -1; var dataEndCol = -1;
+
+			if (html.indexOf("<a href=\"") != -1){
+				var dataInfoString = this.getLinkDataInfo(html);
+				if( dataInfoString.indexOf(":L") != -1 &&
+						dataInfoString.indexOf("-L") != -1 &&
+						dataInfoString.indexOf(":L") < dataInfoString.indexOf("-L") ){
+					fileName = dataInfoString.substring(0, dataInfoString.indexOf(":L"));
+					var dataStartInfo = dataInfoString.substring(dataInfoString.indexOf(":L")+2, dataInfoString.indexOf("-L"));
+					var dataEndInfo = dataInfoString.substring(dataInfoString.indexOf("-L")+2);
+					//this.translatedataInfo(dataStartInfo, dataStartLine, dataStartCol);
+					if(dataStartInfo.indexOf(",") != -1){
+						var splitted = dataStartInfo.split("," , 2);
+						dataStartLine = Number(splitted[0]);
+						dataStartCol = Number(splitted[1]);
+					}else{
+						dataStartLine = Number(dataStartInfo);
+					}
+					if(dataEndInfo.indexOf(",") != -1){
+						var splitted = dataEndInfo.split("," , 2);
+						dataEndLine = Number(splitted[0]);
+						dataEndCol = Number(splitted[1]);
+					}else{
+						dataEndLine = Number(dataEndInfo);
+					}
+					//console.log(fileName);
+					//console.log(dataStartLine);
+					//console.log(dataStartCol);
+					//console.log(dataEndLine);
+					//console.log(dataEndCol);
+				}
+				else if(dataInfoString.indexOf(":L") != -1){
+					fileName = dataInfoString.substring(0, dataInfoString.indexOf(":L"));
+					var dataStartInfo = dataInfoString.substring(dataInfoString.indexOf(":L")+2);
+					if(dataStartInfo.indexOf(",") != -1){
+						var splitted = dataStartInfo.split("," , 2);
+						dataStartLine = Number(splitted[0]);
+						dataStartCol = Number(splitted[1]);
+					}else{
+						dataStartLine = Number(dataStartInfo);
+					}
+				}
+			}
+			message.fileName = fileName;
+			message.dataStartLine = dataStartLine;
+			message.dataStartCol = dataStartCol;
+			message.dataEndLine = dataEndLine;
+			message.dataEndCol = dataEndCol;
 			this.messages.push(message);
 		});
 	};
@@ -79,10 +152,10 @@ export class MessageGroups extends EventEmitter {
 			(this as any).emit('group-added', {
 				messageGroup: messageGroup
 			});
-			messageGroup.on('message-added', (event) => {
+			(messageGroup as any).on('message-added', (event) => {
 				(this as any).emit('message-added', event);
 			});
-			messageGroup.on('message-will-be-added', (event) => {
+			(messageGroup as any).on('message-will-be-added', (event) => {
 				(this as any).emit('message-will-be-added', event);
 			});
 		} else {
