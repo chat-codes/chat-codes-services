@@ -207,11 +207,11 @@ export class ChannelCommunicationService extends EventEmitter {
             if(this.isRoot()) {
                 const memberID = member.id;
                 const serializedState = this.editorStateTracker.serializeEditorStates();
-                this.sendMessageHistory(memberID);
                 this.commLayer.trigger(this.channelName, 'editor-state', {
                     forUser: memberID,
                     state: serializedState
                 });
+                this.sendMessageHistory(memberID);
             }
         });
         //When a user leaves, remove them from the user list and remove their cursor

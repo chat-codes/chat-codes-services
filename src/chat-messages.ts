@@ -9,7 +9,7 @@ import * as showdown from 'showdown';
  * the same time with no other users interrupting.
  */
 export class MessageGroup extends EventEmitter {
-	constructor(private sender:ChatUser, private timestamp:number, messages: Array<any>) {
+	constructor(private parent:MessageGroups, private sender:ChatUser, private timestamp:number, messages: Array<any>) {
 		super();
 		this.doAddMessage.apply(this, messages);
 	}
@@ -23,76 +23,59 @@ export class MessageGroup extends EventEmitter {
 		return linkedDataInfo;
 	}
 
-	private translatedataInfo(dataInfo, dataLine, dataCol):void{
-		dataLine = -1;
-		dataCol = -1;
+	private translatedataInfo(dataInfo):String{
+		var dataLine = -1;
+		var dataCol = -1;
 		if(dataInfo.indexOf(",") != -1){
 			var splitted = dataInfo.split("," , 2);
 			dataLine = Number(splitted[0]);
 			dataCol = Number(splitted[1]);
-
 		}else{
 			dataLine = Number(dataInfo);
 		}
-		console.log(dataLine);
-		console.log(dataCol);
+		return dataLine+","+dataCol;
 	}
 
 	private doAddMessage(...messages):void {
+		const editorStateTracker = this.parent.editorStateTracker;
 		_.each(messages, (message) => {
 			message.html = this.converter.makeHtml(message.message);
-			var html = message.html;
+			var html = document.createElement('li');
+			html.innerHTML = message.html;
+			var aList = html.querySelectorAll("a");
+			if(aList.length!=0){
+				_.each(aList, (a)=>{
+					var dataInfoString = a.href;
+					var fileName = "None";
+					var lIndex1 = dataInfoString.indexOf(":L");
+					var lIndex2 = dataInfoString.indexOf("-L");
 
-      var fileName = "None";
-			var dataStartLine = -1;  var dataStartCol = -1;
-			var dataEndLine = -1; var dataEndCol = -1;
-
-			if (html.indexOf("<a href=\"") != -1){
-				var dataInfoString = this.getLinkDataInfo(html);
-				if( dataInfoString.indexOf(":L") != -1 &&
-						dataInfoString.indexOf("-L") != -1 &&
-						dataInfoString.indexOf(":L") < dataInfoString.indexOf("-L") ){
-					fileName = dataInfoString.substring(0, dataInfoString.indexOf(":L"));
-					var dataStartInfo = dataInfoString.substring(dataInfoString.indexOf(":L")+2, dataInfoString.indexOf("-L"));
-					var dataEndInfo = dataInfoString.substring(dataInfoString.indexOf("-L")+2);
-					//this.translatedataInfo(dataStartInfo, dataStartLine, dataStartCol);
-					if(dataStartInfo.indexOf(",") != -1){
-						var splitted = dataStartInfo.split("," , 2);
-						dataStartLine = Number(splitted[0]);
-						dataStartCol = Number(splitted[1]);
-					}else{
-						dataStartLine = Number(dataStartInfo);
+					if( lIndex1 != -1 && lIndex2 != -1 && lIndex1 < lIndex2 ){
+						fileName = dataInfoString.substring(0, lIndex1);
+						const editorState = editorStateTracker.fuzzyMatch(fileName);
+						const fileID = editorState ? editorState.getEditorID() : fileName;
+						var dataStartInfo = dataInfoString.substring(lIndex1+":L".length, lIndex2);
+						var dataEndInfo = dataInfoString.substring(lIndex2+"-L".length);
+						a.href = "javascript:void(0)";
+						a.setAttribute("data-file", fileID);
+						a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
+						a.setAttribute("data-end", this.translatedataInfo(dataEndInfo));
+						a.setAttribute("class", "line_ref");
 					}
-					if(dataEndInfo.indexOf(",") != -1){
-						var splitted = dataEndInfo.split("," , 2);
-						dataEndLine = Number(splitted[0]);
-						dataEndCol = Number(splitted[1]);
-					}else{
-						dataEndLine = Number(dataEndInfo);
+					else if(lIndex1 != -1){
+						fileName = dataInfoString.substring(0, lIndex1);
+						const editorState = editorStateTracker.fuzzyMatch(fileName);
+						const fileID = editorState ? editorState.getEditorID() : fileName;
+						var dataStartInfo = dataInfoString.substring(lIndex1+ ":L".length);
+						a.href = "javascript:void(0)";
+						a.setAttribute("data-file", fileID);
+						a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
+						a.setAttribute("data-end", "-1,-1");
+						a.setAttribute("class", "line_ref");
 					}
-					//console.log(fileName);
-					//console.log(dataStartLine);
-					//console.log(dataStartCol);
-					//console.log(dataEndLine);
-					//console.log(dataEndCol);
-				}
-				else if(dataInfoString.indexOf(":L") != -1){
-					fileName = dataInfoString.substring(0, dataInfoString.indexOf(":L"));
-					var dataStartInfo = dataInfoString.substring(dataInfoString.indexOf(":L")+2);
-					if(dataStartInfo.indexOf(",") != -1){
-						var splitted = dataStartInfo.split("," , 2);
-						dataStartLine = Number(splitted[0]);
-						dataStartCol = Number(splitted[1]);
-					}else{
-						dataStartLine = Number(dataStartInfo);
-					}
-				}
+				})
 			}
-			message.fileName = fileName;
-			message.dataStartLine = dataStartLine;
-			message.dataStartCol = dataStartCol;
-			message.dataEndLine = dataEndLine;
-			message.dataEndCol = dataEndCol;
+			message.html = html.innerHTML;
 			this.messages.push(message);
 		});
 	};
@@ -121,7 +104,7 @@ export class MessageGroup extends EventEmitter {
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
 export class MessageGroups extends EventEmitter {
-	constructor(private chatUserList:ChatUserList, private editorStateTracker:EditorStateTracker) {
+	constructor(private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
 		super();
 	};
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
@@ -146,7 +129,7 @@ export class MessageGroups extends EventEmitter {
 		if (!lastMessageGroup || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
 			// Add to a new group
 			const sender = this.chatUserList.getUser(data.uid);
-			const messageGroup = new MessageGroup(sender, data.timestamp, [data]);
+			const messageGroup = new MessageGroup(this, sender, data.timestamp, [data]);
 			this.messageGroups.push(messageGroup);
 
 			(this as any).emit('group-added', {
