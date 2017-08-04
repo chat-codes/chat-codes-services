@@ -25,8 +25,15 @@ export class MessageGroup extends EventEmitter {
 	};
 
 	public addMessage(message) {
+		(this as any).emit('message-will-be-added', {
+			group: this,
+			message: message
+		});
+
 		this.doAddMessage(message);
+
 		(this as any).emit('message-added', {
+			group: this,
 			message: message
 		});
 	};
@@ -71,6 +78,12 @@ export class MessageGroups extends EventEmitter {
 
 			(this as any).emit('group-added', {
 				messageGroup: messageGroup
+			});
+			messageGroup.on('message-added', (event) => {
+				(this as any).emit('message-added', event);
+			});
+			messageGroup.on('message-will-be-added', (event) => {
+				(this as any).emit('message-will-be-added', event);
 			});
 		} else {
 			// Add to the latest group

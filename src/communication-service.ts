@@ -10,7 +10,7 @@ declare function require(name:string);
 declare var __dirname:string;
 declare var window;
 
-const DEBUG = true;
+const DEBUG = false;
 
 
 /**

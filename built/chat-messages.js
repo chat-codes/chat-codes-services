@@ -24,8 +24,13 @@ class MessageGroup extends events_1.EventEmitter {
     }
     ;
     addMessage(message) {
+        this.emit('message-will-be-added', {
+            group: this,
+            message: message
+        });
         this.doAddMessage(message);
         this.emit('message-added', {
+            group: this,
             message: message
         });
     }
@@ -68,6 +73,12 @@ class MessageGroups extends events_1.EventEmitter {
             this.messageGroups.push(messageGroup);
             this.emit('group-added', {
                 messageGroup: messageGroup
+            });
+            messageGroup.on('message-added', (event) => {
+                this.emit('message-added', event);
+            });
+            messageGroup.on('message-will-be-added', (event) => {
+                this.emit('message-will-be-added', event);
             });
         }
         else {

@@ -6,7 +6,7 @@ const pusher_communication_layer_1 = require("./pusher-communication-layer");
 const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
-const DEBUG = true;
+const DEBUG = false;
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
  * numbers to the channel name
