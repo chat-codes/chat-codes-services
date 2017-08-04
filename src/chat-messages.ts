@@ -2,7 +2,6 @@ import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
-import * as $ from 'jquery';
 
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
