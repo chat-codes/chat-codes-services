@@ -110,6 +110,8 @@ class GrammarDelta {
     }
     serialize() { return this.serializedState; }
 }
+//content change
+//IMPORTant
 class EditChange {
     /**
      * Represents a change where text has been edited
@@ -417,8 +419,12 @@ class EditorStateTracker {
     }
     focus(editorID, range) {
         const editorState = this.getEditorState(editorID);
+        //this.channelCommunicationService.editorOpened
+        console.log(editorState);
         if (editorState) {
-            return editorState.focus(range);
+            editorState.focus(range);
+            return editorState;
+            //return editorState.focus(range);
         }
         else {
             return false;

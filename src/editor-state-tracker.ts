@@ -3,6 +3,7 @@ import * as FuzzySet from 'fuzzyset.js';
 import { EventEmitter } from 'events';
 import { ChannelCommunicationService } from './communication-service';
 
+
 interface SerializedRange {
 	start: Array<number>,
 	end: Array<number>
@@ -152,6 +153,8 @@ class GrammarDelta implements UndoableDelta {
 	public serialize() { return this.serializedState; }
 }
 
+//content change
+//IMPORTant
 class EditChange implements UndoableDelta {
 	private oldRangeAnchor; // Anchors are important to keep track of where this change should be..
 	private newRangeAnchor; // ..in case any edits need to be inserted before this one
@@ -466,10 +469,16 @@ export class EditorStateTracker {
 			return false;
 		}
 	}
-	public focus(editorID:number, range:SerializedRange):boolean {
+
+
+	public focus(editorID:number, range:SerializedRange) {
 		const editorState:EditorState = this.getEditorState(editorID);
+		//this.channelCommunicationService.editorOpened
+		console.log(editorState);
 		if(editorState) {
-			return editorState.focus(range);
+			editorState.focus(range);
+			return editorState;
+			//return editorState.focus(range);
 		} else {
 			return false;
 		}
