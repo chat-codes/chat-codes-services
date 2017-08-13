@@ -288,8 +288,36 @@ class EditorState {
     removeHighlight(highlightID) {
         return this.getEditorWrapper().removeHighlight(highlightID);
     }
-    focus(range) {
-        return this.getEditorWrapper().focus(range);
+    focus(range, timestamp) {
+        //this.redoDelta(timestamp);
+        var temp = this.getEditorWrapper().focus(range);
+        setTimeout(() => {
+            this.redoDelta(timestamp);
+        }, 2000);
+        return temp;
+    }
+    undoDelta(timestamp) {
+        let i = this.deltas.length - 1;
+        let d;
+        for (; i >= 0; i--) {
+            d = this.deltas[i];
+            if (d.getTimestamp() > timestamp) {
+                d.undoAction(this);
+            }
+            else {
+                break;
+            }
+        }
+    }
+    redoDelta(timestamp) {
+        let i = 0;
+        let d;
+        for (; i < this.deltas.length; i++) {
+            d = this.deltas[i];
+            if (d.getTimestamp() > timestamp) {
+                d.doAction(this);
+            }
+        }
     }
     addDelta(serializedDelta, mustPerformChange) {
         const { type } = serializedDelta;
@@ -319,6 +347,7 @@ class EditorState {
         if (delta) {
             this.handleDelta(delta, mustPerformChange);
         }
+        console.log(delta);
         return delta;
     }
     handleDelta(delta, mustPerformChange) {
@@ -408,6 +437,24 @@ class EditorStateTracker {
             return -1;
         }
     }
+    undoDelta(editorID, timestamp) {
+        const editorState = this.getEditorState(editorID);
+        if (editorState) {
+            return editorState.undoDelta(timestamp);
+        }
+        else {
+            return -1;
+        }
+    }
+    redoDelta(editorID, timestamp) {
+        const editorState = this.getEditorState(editorID);
+        if (editorState) {
+            return editorState.redoDelta(timestamp);
+        }
+        else {
+            return -1;
+        }
+    }
     removeHighlight(editorID, highlightID) {
         const editorState = this.getEditorState(editorID);
         if (editorState) {
@@ -417,12 +464,12 @@ class EditorStateTracker {
             return false;
         }
     }
-    focus(editorID, range) {
+    focus(editorID, range, timestamp) {
         const editorState = this.getEditorState(editorID);
         //this.channelCommunicationService.editorOpened
         console.log(editorState);
         if (editorState) {
-            editorState.focus(range);
+            editorState.focus(range, timestamp);
             return editorState;
             //return editorState.focus(range);
         }

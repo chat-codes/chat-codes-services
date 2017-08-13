@@ -342,12 +342,42 @@ export class EditorState {
 	public removeHighlight(highlightID:number):boolean {
 		return this.getEditorWrapper().removeHighlight(highlightID);
 	}
-	public focus(range):boolean {
-		return this.getEditorWrapper().focus(range);
+	public focus(range, timestamp):boolean {
+		//this.redoDelta(timestamp);
+		var temp = this.getEditorWrapper().focus(range);
+		setTimeout(() => {
+			this.redoDelta(timestamp);
+		}, 2000);
+		return temp;
+	}
+
+	public undoDelta(timestamp){
+		let i = this.deltas.length-1;
+		let d;
+		for(; i>=0; i--) {
+			d = this.deltas[i];
+			if(d.getTimestamp() > timestamp) {
+				d.undoAction(this);
+			} else {
+				break;
+			}
+		}
+	}
+
+	public redoDelta(timestamp){
+		let i=0;
+		let d;
+		for(; i<this.deltas.length; i++) {
+			d = this.deltas[i];
+			if(d.getTimestamp() > timestamp) {
+				d.doAction(this);
+			}
+		}
 	}
 
 	public addDelta(serializedDelta, mustPerformChange:boolean):UndoableDelta {
 		const {type} = serializedDelta;
+
 		let delta;
 
 		if(type === 'open') {
@@ -370,6 +400,7 @@ export class EditorState {
 		if(delta) {
 			this.handleDelta(delta, mustPerformChange);
 		}
+		console.log(delta);
 		return delta;
 	}
 
@@ -461,6 +492,25 @@ export class EditorStateTracker {
 			return -1;
 		}
 	}
+
+	public undoDelta(editorID:number, timestamp:number){
+		const editorState:EditorState = this.getEditorState(editorID);
+		if(editorState) {
+			return editorState.undoDelta(timestamp);
+		} else {
+			return -1;
+		}
+	}
+
+	public redoDelta(editorID:number, timestamp:number){
+		const editorState:EditorState = this.getEditorState(editorID);
+		if(editorState) {
+			return editorState.redoDelta(timestamp);
+		} else {
+			return -1;
+		}
+	}
+
 	public removeHighlight(editorID:number, highlightID:number):boolean {
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
@@ -471,12 +521,12 @@ export class EditorStateTracker {
 	}
 
 
-	public focus(editorID:number, range:SerializedRange) {
+	public focus(editorID:number, range:SerializedRange, timestamp:number) {
 		const editorState:EditorState = this.getEditorState(editorID);
 		//this.channelCommunicationService.editorOpened
 		console.log(editorState);
 		if(editorState) {
-			editorState.focus(range);
+			editorState.focus(range, timestamp);
 			return editorState;
 			//return editorState.focus(range);
 		} else {
