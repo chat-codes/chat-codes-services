@@ -128,6 +128,7 @@ export class MessageGroups extends EventEmitter {
 
 		if (!lastMessageGroup || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
 			// Add to a new group
+
 			const sender = this.chatUserList.getUser(data.uid);
 			const messageGroup = new MessageGroup(this, sender, data.timestamp, [data]);
 			this.messageGroups.push(messageGroup);

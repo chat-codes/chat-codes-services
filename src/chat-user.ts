@@ -37,7 +37,7 @@ export class ChatUser extends EventEmitter {
 export class ChatUserList extends EventEmitter {
     public activeUsers:Array<ChatUser>=[];
     public allUsers:Array<ChatUser>=[];
-    private current_user_color:number = 2;
+    private currentUserColor:number = 2;
     private numColors:number = 4;
     constructor() {
         super();
@@ -51,14 +51,20 @@ export class ChatUserList extends EventEmitter {
             this.add(id===myID, id, memberInfo.name);
         });
     }
-    public add(isMe:boolean, id:string, name:string, active:boolean=true):ChatUser {
+    public add(isMe:boolean, id:string, name:string, active:boolean=true, userID:string=null):ChatUser {
+        if (!myID === null) {
+            id = myID
+        }
         let user:ChatUser = this.getUser(id);
+        console.log(1);
         if(user === null) {
-            const colorIndex = isMe ? 1 : this.current_user_color;
-            this.current_user_color = 2+((this.current_user_color+1)%this.numColors);
+            console.log(2);
+            const colorIndex = isMe ? 1 : this.currentUserColor;
+            this.currentUserColor = 2+((this.currentUserColor+1)%this.numColors);
 
-            user = new ChatUser(isMe, id, name, active, colorIndex);
+            user = new ChatUser(isMe, id, name, active, 1);
             if(active) {
+                console.log(3);
                 this.activeUsers.push(user);
             }
             this.allUsers.push(user);
@@ -91,6 +97,7 @@ export class ChatUserList extends EventEmitter {
     }
 
     public getUser(id:string):ChatUser {
+        console.log(this.allUsers);
         for(var i = 0; i<this.allUsers.length; i++) {
             var id_i = this.allUsers[i].id;
             if(id_i === id) {

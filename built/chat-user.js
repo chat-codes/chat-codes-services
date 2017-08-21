@@ -56,7 +56,10 @@ class ChatUserList extends events_1.EventEmitter {
             this.add(id === myID, id, memberInfo.name);
         });
     }
-    add(isMe, id, name, active = true) {
+    add(isMe, id, name, active = true, userID = null) {
+        if (!userID === null) {
+            id = userID;
+        }
         let user = this.getUser(id);
         if (user === null) {
             const colorIndex = isMe ? 1 : this.current_user_color;
@@ -93,6 +96,7 @@ class ChatUserList extends events_1.EventEmitter {
         }
     }
     getUser(id) {
+        console.log(this.allUsers);
         for (var i = 0; i < this.allUsers.length; i++) {
             var id_i = this.allUsers[i].id;
             if (id_i === id) {

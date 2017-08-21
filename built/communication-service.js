@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
-const pusher_communication_layer_1 = require("./pusher-communication-layer");
+const socket_communication_layer_1 = require("./socket-communication-layer");
 const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
@@ -174,6 +174,8 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         // Add every current member to the user list
         this.commLayer.getMembers(this.channelName).then((memberInfo) => {
             this.myID = memberInfo.myID;
+            console.log('------------');
+            console.log(memberInfo);
             this.userList.addAll(memberInfo);
         });
         // Add anyone who subsequently joines
@@ -366,7 +368,7 @@ class CommunicationService {
         this.isRoot = isRoot;
         this.EditorWrapperClass = EditorWrapperClass;
         this.clients = {}; // Maps channel names to channel comms
-        this.commLayer = new pusher_communication_layer_1.PusherCommunicationLayer(authInfo);
+        this.commLayer = new socket_communication_layer_1.SocketCommunicationLayer(authInfo);
         // {
         //     username: username
         // }, key, cluster);

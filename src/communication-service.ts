@@ -1,7 +1,7 @@
 
 import * as _ from 'underscore';
 import { ChatUserList, ChatUser } from './chat-user'
-import { PusherCommunicationLayer } from './pusher-communication-layer';
+import { SocketCommunicationLayer } from './socket-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
 import { EditorStateTracker } from './editor-state-tracker';
@@ -11,7 +11,6 @@ declare var __dirname:string;
 declare var window;
 
 const DEBUG = false;
-
 
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
@@ -71,7 +70,7 @@ function generateChannelName(commLayer):Promise<string> {
 export class ChannelCommunicationService extends EventEmitter {
     public userList:ChatUserList = new ChatUserList(); // A list of chat userList
     public messageGroups:MessageGroups // A list of message groups
-    public commLayer:PusherCommunicationLayer; // The communication channel
+    public commLayer:SocketCommunicationLayer; // The communication channel
     public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
 
@@ -197,6 +196,8 @@ export class ChannelCommunicationService extends EventEmitter {
         // Add every current member to the user list
         this.commLayer.getMembers(this.channelName).then((memberInfo) => {
             this.myID = memberInfo.myID;
+            console.log('------------');
+            console.log(memberInfo);
             this.userList.addAll(memberInfo);
         });
 
@@ -289,7 +290,6 @@ export class ChannelCommunicationService extends EventEmitter {
             timestamp: this.getTimestamp()
         };
         const meUser = this.userList.getMe();
-
         this.commLayer.trigger(this.channelName, 'typing', data);
 
         (this as any).emit('typing', _.extend({
@@ -405,12 +405,12 @@ export class ChannelCommunicationService extends EventEmitter {
 /* A class to create and manage ChannelCommunicationService instances */
 export class CommunicationService {
     constructor(public isRoot:boolean, authInfo, private EditorWrapperClass) {
-        this.commLayer = new PusherCommunicationLayer(authInfo);
+        this.commLayer = new SocketCommunicationLayer(authInfo);
         // {
         //     username: username
         // }, key, cluster);
     }
-    public commLayer:PusherCommunicationLayer; // The underlying communication mechanism
+    public commLayer:SocketCommunicationLayer; // The underlying communication mechanism
     private clients:{[channelName:string]:ChannelCommunicationService} = {}; // Maps channel names to channel comms
 
     /**
