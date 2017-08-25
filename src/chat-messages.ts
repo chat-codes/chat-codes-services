@@ -4,6 +4,10 @@ import { EditorStateTracker } from './editor-state-tracker';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
 
+export class EditGroup extends EventEmitter {
+
+}
+
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
@@ -15,7 +19,27 @@ export class MessageGroup extends EventEmitter {
 	}
 
 	private messages: Array<any> = [];
-	private converter = new showdown.Converter();
+	private converter = new showdown.Converter({simplifiedAutoLink: true});
+	private fileLinkRegexp = new RegExp('^(.+):\s*L(\\d+)(\\s*,\\s*(\\d+))?(\s*-\s*L(\\d+)(\\s*,\\s*(\\d+))?)?$')
+
+	private matchFileLinkAttributes(str) {
+		const match = str.match(this.fileLinkRegexp);
+		if(match) {
+			return {
+				fileName: match[1],
+				start: {
+					row:  parseInt(match[2]),
+					column: parseInt(match[4])
+				},
+				end: {
+					row:  parseInt(match[6]),
+					column: parseInt(match[8])
+				}
+			};
+		} else {
+			return false;
+		}
+	}
 
 	private getLinkDataInfo(html):String{
 		var htmlLatter = html.substring(html.indexOf("<a href=\"") + "<a href=\"".length);
@@ -23,59 +47,31 @@ export class MessageGroup extends EventEmitter {
 		return linkedDataInfo;
 	}
 
-	private translatedataInfo(dataInfo):String{
-		var dataLine = -1;
-		var dataCol = -1;
-		if(dataInfo.indexOf(",") != -1){
-			var splitted = dataInfo.split("," , 2);
-			dataLine = Number(splitted[0]);
-			dataCol = Number(splitted[1]);
-		}else{
-			dataLine = Number(dataInfo);
-		}
-		return dataLine+","+dataCol;
-	}
-
 	private doAddMessage(...messages):void {
 		const editorStateTracker = this.parent.editorStateTracker;
 		_.each(messages, (message) => {
-			message.html = this.converter.makeHtml(message.message);
-			var html = document.createElement('li');
-			html.innerHTML = message.html;
-			var aList = html.querySelectorAll("a");
-			if(aList.length!=0){
-				_.each(aList, (a)=>{
-					var dataInfoString = a.href;
-					var fileName = "None";
-					var lIndex1 = dataInfoString.indexOf(":L");
-					var lIndex2 = dataInfoString.indexOf("-L");
+			const htmlBuilder = document.createElement('li');
+			htmlBuilder.innerHTML = this.converter.makeHtml(message.message);
+			_.each(htmlBuilder.querySelectorAll('a'), (a) => {
+				const fileLinkInfo = this.matchFileLinkAttributes(a.getAttribute('href'));
+				if(fileLinkInfo) {
+					const {fileName, start, end} = fileLinkInfo;
+					if(isNaN(start.column)) { start.column = -1; }
+					if(isNaN(end.row)) { end.row = start.row; } // just one line
+					if(isNaN(end.column)) { end.column = -1; }
 
-					if( lIndex1 != -1 && lIndex2 != -1 && lIndex1 < lIndex2 ){
-						fileName = dataInfoString.substring(0, lIndex1);
-						const editorState = editorStateTracker.fuzzyMatch(fileName);
-						const fileID = editorState ? editorState.getEditorID() : fileName;
-						var dataStartInfo = dataInfoString.substring(lIndex1+":L".length, lIndex2);
-						var dataEndInfo = dataInfoString.substring(lIndex2+"-L".length);
-						a.href = "javascript:void(0)";
-						a.setAttribute("data-file", fileID);
-						a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
-						a.setAttribute("data-end", this.translatedataInfo(dataEndInfo));
-						a.setAttribute("class", "line_ref");
-					}
-					else if(lIndex1 != -1){
-						fileName = dataInfoString.substring(0, lIndex1);
-						const editorState = editorStateTracker.fuzzyMatch(fileName);
-						const fileID = editorState ? editorState.getEditorID() : fileName;
-						var dataStartInfo = dataInfoString.substring(lIndex1+ ":L".length);
-						a.href = "javascript:void(0)";
-						a.setAttribute("data-file", fileID);
-						a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
-						a.setAttribute("data-end", "-1,-1");
-						a.setAttribute("class", "line_ref");
-					}
-				})
-			}
-			message.html = html.innerHTML;
+					const editorState = editorStateTracker.fuzzyMatch(fileName);
+					const fileID = editorState ? editorState.getEditorID() : fileName;
+
+					a.setAttribute('href', 'javascript:void(0)');
+					a.setAttribute('class', 'line_ref');
+
+					a.setAttribute('data-file', fileID);
+					a.setAttribute('data-start', [start.row, start.column].join(','));
+					a.setAttribute('data-end', [end.row, end.column].join(','));
+				}
+			});
+			message.html = htmlBuilder.innerHTML;
 			this.messages.push(message);
 		});
 	};
@@ -147,6 +143,9 @@ export class MessageGroups extends EventEmitter {
 		}
 	}
 	public getMessageGroups() { return this.messageGroups; }
+	public addEdit(data) {
+		console.log(data);
+	}
 
 	/**
 	 * Returns true if there are no messages and false otherwise

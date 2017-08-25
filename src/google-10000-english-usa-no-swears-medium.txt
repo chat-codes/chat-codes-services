@@ -461,7 +461,6 @@ makes
 policies
 beauty
 manager
-india
 position
 taken
 listings
@@ -655,7 +654,6 @@ rooms
 female
 thomas
 primary
-cancer
 numbers
 reason
 browser
@@ -667,7 +665,6 @@ schedule
 purpose
 feature
 comes
-police
 everyone
 approach
 cameras
@@ -812,7 +809,6 @@ vacation
 century
 academic
 graphics
-indian
 expected
 grade
 dating
@@ -1329,14 +1325,12 @@ nuclear
 taxes
 mouse
 signal
-criminal
 issued
 brain
 sexual
 powerful
 dream
 obtained
-false
 flower
 passed
 supplied
@@ -2688,7 +2682,6 @@ nikon
 candy
 pills
 tiger
-donald
 folks
 sensor
 exposed

@@ -3,6 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
 const showdown = require("showdown");
+class EditGroup extends events_1.EventEmitter {
+}
+exports.EditGroup = EditGroup;
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
@@ -14,66 +17,62 @@ class MessageGroup extends events_1.EventEmitter {
         this.sender = sender;
         this.timestamp = timestamp;
         this.messages = [];
-        this.converter = new showdown.Converter();
+        this.converter = new showdown.Converter({ simplifiedAutoLink: true });
+        this.fileLinkRegexp = new RegExp('^(.+):\s*L(\\d+)(\\s*,\\s*(\\d+))?(\s*-\s*L(\\d+)(\\s*,\\s*(\\d+))?)?$');
         this.doAddMessage.apply(this, messages);
+    }
+    matchFileLinkAttributes(str) {
+        const match = str.match(this.fileLinkRegexp);
+        if (match) {
+            return {
+                fileName: match[1],
+                start: {
+                    row: parseInt(match[2]),
+                    column: parseInt(match[4])
+                },
+                end: {
+                    row: parseInt(match[6]),
+                    column: parseInt(match[8])
+                }
+            };
+        }
+        else {
+            return false;
+        }
     }
     getLinkDataInfo(html) {
         var htmlLatter = html.substring(html.indexOf("<a href=\"") + "<a href=\"".length);
         var linkedDataInfo = htmlLatter.substring(htmlLatter.indexOf("\">") + 2, htmlLatter.indexOf("</a>"));
         return linkedDataInfo;
     }
-    translatedataInfo(dataInfo) {
-        var dataLine = -1;
-        var dataCol = -1;
-        if (dataInfo.indexOf(",") != -1) {
-            var splitted = dataInfo.split(",", 2);
-            dataLine = Number(splitted[0]);
-            dataCol = Number(splitted[1]);
-        }
-        else {
-            dataLine = Number(dataInfo);
-        }
-        return dataLine + "," + dataCol;
-    }
     doAddMessage(...messages) {
         const editorStateTracker = this.parent.editorStateTracker;
         _.each(messages, (message) => {
-            message.html = this.converter.makeHtml(message.message);
-            var html = document.createElement('li');
-            html.innerHTML = message.html;
-            var aList = html.querySelectorAll("a");
-            if (aList.length != 0) {
-                _.each(aList, (a) => {
-                    var dataInfoString = a.href;
-                    var fileName = "None";
-                    var lIndex1 = dataInfoString.indexOf(":L");
-                    var lIndex2 = dataInfoString.indexOf("-L");
-                    if (lIndex1 != -1 && lIndex2 != -1 && lIndex1 < lIndex2) {
-                        fileName = dataInfoString.substring(0, lIndex1);
-                        const editorState = editorStateTracker.fuzzyMatch(fileName);
-                        const fileID = editorState ? editorState.getEditorID() : fileName;
-                        var dataStartInfo = dataInfoString.substring(lIndex1 + ":L".length, lIndex2);
-                        var dataEndInfo = dataInfoString.substring(lIndex2 + "-L".length);
-                        a.href = "javascript:void(0)";
-                        a.setAttribute("data-file", fileID);
-                        a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
-                        a.setAttribute("data-end", this.translatedataInfo(dataEndInfo));
-                        a.setAttribute("class", "line_ref");
+            const htmlBuilder = document.createElement('li');
+            htmlBuilder.innerHTML = this.converter.makeHtml(message.message);
+            _.each(htmlBuilder.querySelectorAll('a'), (a) => {
+                const fileLinkInfo = this.matchFileLinkAttributes(a.getAttribute('href'));
+                if (fileLinkInfo) {
+                    const { fileName, start, end } = fileLinkInfo;
+                    if (isNaN(start.column)) {
+                        start.column = -1;
                     }
-                    else if (lIndex1 != -1) {
-                        fileName = dataInfoString.substring(0, lIndex1);
-                        const editorState = editorStateTracker.fuzzyMatch(fileName);
-                        const fileID = editorState ? editorState.getEditorID() : fileName;
-                        var dataStartInfo = dataInfoString.substring(lIndex1 + ":L".length);
-                        a.href = "javascript:void(0)";
-                        a.setAttribute("data-file", fileID);
-                        a.setAttribute("data-start", this.translatedataInfo(dataStartInfo));
-                        a.setAttribute("data-end", "-1,-1");
-                        a.setAttribute("class", "line_ref");
+                    if (isNaN(end.row)) {
+                        end.row = start.row;
+                    } // just one line
+                    if (isNaN(end.column)) {
+                        end.column = -1;
                     }
-                });
-            }
-            message.html = html.innerHTML;
+                    const editorState = editorStateTracker.fuzzyMatch(fileName);
+                    const fileID = editorState ? editorState.getEditorID() : fileName;
+                    a.setAttribute('href', 'javascript:void(0)');
+                    a.setAttribute('class', 'line_ref');
+                    a.setAttribute('data-file', fileID);
+                    a.setAttribute('data-start', [start.row, start.column].join(','));
+                    a.setAttribute('data-end', [end.row, end.column].join(','));
+                }
+            });
+            message.html = htmlBuilder.innerHTML;
             this.messages.push(message);
         });
     }
@@ -142,6 +141,9 @@ class MessageGroups extends events_1.EventEmitter {
         }
     }
     getMessageGroups() { return this.messageGroups; }
+    addEdit(data) {
+        console.log(data);
+    }
     /**
      * Returns true if there are no messages and false otherwise
      * @return {boolean} If there are no messages
