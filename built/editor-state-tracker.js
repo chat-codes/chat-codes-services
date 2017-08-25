@@ -238,6 +238,7 @@ class EditorState {
         this.deltas = [];
         this.selections = {};
         this.remoteCursors = new RemoteCursorMarker(this);
+        this.deltaPointer = -1;
         let state = _.extend({
             isOpen: true,
             deltas: [],
@@ -280,14 +281,57 @@ class EditorState {
     ;
     getIsModified() { return this.modified; }
     ;
-    addHighlight(range) {
-        return this.getEditorWrapper().addHighlight(range);
+    addHighlight(range, timestamp = null, extraInfo) {
+        this.revertToTimestamp(timestamp, extraInfo);
+        return this.getEditorWrapper().addHighlight(range, extraInfo);
     }
-    removeHighlight(highlightID) {
-        return this.getEditorWrapper().removeHighlight(highlightID);
+    removeHighlight(highlightID, extraInfo) {
+        this.revertToTimestamp(null, extraInfo);
+        return this.getEditorWrapper().removeHighlight(highlightID, extraInfo);
     }
-    focus(range) {
-        return this.getEditorWrapper().focus(range);
+    focus(range, timestamp = null, extraInfo) {
+        this.revertToTimestamp(timestamp, extraInfo);
+        return this.getEditorWrapper().focus(range, extraInfo);
+    }
+    moveDeltaPointer(index) {
+        let d;
+        if (this.deltaPointer < index) {
+            while (this.deltaPointer < index) {
+                this.deltaPointer++;
+                d = this.deltas[this.deltaPointer];
+                d.doAction(this);
+            }
+        }
+        else if (this.deltaPointer > index) {
+            while (this.deltaPointer > index) {
+                d = this.deltas[this.deltaPointer];
+                d.undoAction(this);
+                this.deltaPointer--;
+            }
+        }
+    }
+    getLastDeltaIndexBeforeTimestamp(timestamp) {
+        let d;
+        let i = 0;
+        for (; i < this.deltas.length; i++) {
+            d = this.deltas[i];
+            if (d.getTimestamp() > timestamp) {
+                break;
+            }
+        }
+        return i - 1;
+    }
+    revertToTimestamp(timestamp, extraInfo) {
+        const editorWrapper = this.getEditorWrapper();
+        if (timestamp) {
+            editorWrapper.setReadOnly(true, extraInfo);
+            const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(timestamp);
+            this.moveDeltaPointer(lastDeltaBefore);
+        }
+        else {
+            editorWrapper.setReadOnly(false, extraInfo);
+            this.moveDeltaPointer(this.deltas.length - 1);
+        }
     }
     addDelta(serializedDelta, mustPerformChange) {
         const { type } = serializedDelta;
@@ -320,32 +364,16 @@ class EditorState {
         return delta;
     }
     handleDelta(delta, mustPerformChange) {
+        const oldDeltaPointer = this.deltaPointer;
         //Go back and undo any deltas that should have been done after this delta
-        let i = this.deltas.length - 1;
-        let d;
-        for (; i >= 0; i--) {
-            d = this.deltas[i];
-            if (d.getTimestamp() > delta.getTimestamp()) {
-                d.undoAction(this);
-            }
-            else {
-                break;
-            }
+        const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(delta.getTimestamp());
+        this.moveDeltaPointer(lastDeltaBefore);
+        this.deltas.splice(this.deltaPointer + 1, 0, delta);
+        if (mustPerformChange === false) {
+            this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
         }
-        // Insert this delta where it should be
-        const insertAt = i + 1;
-        this.deltas.splice(insertAt, 0, delta);
-        if (mustPerformChange) {
-            i = insertAt; // will include this delta as we move forward
-        }
-        else {
-            i = insertAt + 1;
-        }
-        // Go forward and do allof the deltas that come before.
-        for (; i < this.deltas.length; i++) {
-            d = this.deltas[i];
-            d.doAction(this);
-        }
+        // Go forward and do all of the deltas that come after.
+        this.moveDeltaPointer(oldDeltaPointer + 1);
     }
     removeUserCursors(user) {
         this.remoteCursors.removeUserCursors(user);
@@ -397,28 +425,28 @@ class EditorStateTracker {
             es.removeUserCursors(user);
         });
     }
-    addHighlight(editorID, range) {
+    addHighlight(editorID, range, timestamp, extraInfo = {}) {
         const editorState = this.getEditorState(editorID);
         if (editorState) {
-            return editorState.addHighlight(range);
+            return editorState.addHighlight(range, timestamp, extraInfo);
         }
         else {
             return -1;
         }
     }
-    removeHighlight(editorID, highlightID) {
+    removeHighlight(editorID, highlightID, extraInfo = {}) {
         const editorState = this.getEditorState(editorID);
         if (editorState) {
-            return editorState.removeHighlight(highlightID);
+            return editorState.removeHighlight(highlightID, extraInfo);
         }
         else {
             return false;
         }
     }
-    focus(editorID, range) {
+    focus(editorID, range, timestamp, extraInfo = {}) {
         const editorState = this.getEditorState(editorID);
         if (editorState) {
-            return editorState.focus(range);
+            return editorState.focus(range, timestamp, extraInfo);
         }
         else {
             return false;

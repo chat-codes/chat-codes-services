@@ -88,11 +88,12 @@ interface EditorWrapper {
 	updateRemoteCursorPosition(cursor, remoteCursorMarker:RemoteCursorMarker);
 	updateRemoteCursorSelection(cursor, remoteCursorMarker:RemoteCursorMarker);
 	removeRemoteCursor(cursor, remoteCursorMarker:RemoteCursorMarker);
-    addHighlight(range:SerializedRange):number;
-    removeHighlight(highlightID:number);
-	focus(range:SerializedRange);
+    addHighlight(range:SerializedRange, extraInfo?):number;
+    removeHighlight(highlightID:number, extraInfo?);
+	focus(range:SerializedRange, extraInfo?);
     saveFile();
 	serializeEditorStates();
+	setReadOnly(readOnly:boolean, extraInfo?);
 }
 
 /**
@@ -297,6 +298,7 @@ export class EditorState {
 	private remoteCursors:RemoteCursorMarker = new RemoteCursorMarker(this);
 	private title:string;
 	private modified:boolean;
+	private deltaPointer:number=-1;
     constructor(suppliedState, private editorWrapper, mustPerformChange:boolean) {
         let state = _.extend({
             isOpen: true,
@@ -333,14 +335,57 @@ export class EditorState {
 	public getRemoteCursors():RemoteCursorMarker { return this.remoteCursors; };
 	public getEditorID():number { return this.editorID; };
 	public getIsModified():boolean { return this.modified; };
-	public addHighlight(range):number {
-		return this.getEditorWrapper().addHighlight(range);
+	public addHighlight(range, timestamp:number=null, extraInfo):number {
+		this.revertToTimestamp(timestamp, extraInfo);
+		return this.getEditorWrapper().addHighlight(range, extraInfo);
 	}
-	public removeHighlight(highlightID:number):boolean {
-		return this.getEditorWrapper().removeHighlight(highlightID);
+	public removeHighlight(highlightID:number, extraInfo):boolean {
+		this.revertToTimestamp(null, extraInfo);
+		return this.getEditorWrapper().removeHighlight(highlightID, extraInfo);
 	}
-	public focus(range):boolean {
-		return this.getEditorWrapper().focus(range);
+	public focus(range, timestamp:number=null, extraInfo):boolean {
+		this.revertToTimestamp(timestamp, extraInfo);
+		return this.getEditorWrapper().focus(range, extraInfo);
+	}
+	private moveDeltaPointer(index:number) {
+		let d:UndoableDelta;
+
+		if(this.deltaPointer < index) {
+			while(this.deltaPointer < index) {
+				this.deltaPointer++;
+				d = this.deltas[this.deltaPointer];
+				d.doAction(this);
+			}
+		} else if(this.deltaPointer > index) {
+			while(this.deltaPointer > index) {
+				d = this.deltas[this.deltaPointer];
+				d.undoAction(this);
+				this.deltaPointer--;
+			}
+		}
+	}
+	private getLastDeltaIndexBeforeTimestamp(timestamp:number):number {
+		let d:UndoableDelta;
+		let i:number = 0;
+		for(; i<this.deltas.length; i++) {
+			d = this.deltas[i];
+			if(d.getTimestamp() > timestamp) {
+				break;
+			}
+		}
+		return i-1;
+	}
+
+	private revertToTimestamp(timestamp:number, extraInfo?) {
+		const editorWrapper = this.getEditorWrapper();
+		if(timestamp) {
+			editorWrapper.setReadOnly(true, extraInfo);
+			const lastDeltaBefore:number = this.getLastDeltaIndexBeforeTimestamp(timestamp);
+			this.moveDeltaPointer(lastDeltaBefore);
+		} else {
+			editorWrapper.setReadOnly(false, extraInfo);
+			this.moveDeltaPointer(this.deltas.length-1);
+		}
 	}
 
 	public addDelta(serializedDelta, mustPerformChange:boolean):UndoableDelta {
@@ -371,32 +416,17 @@ export class EditorState {
 	}
 
 	private handleDelta(delta:UndoableDelta, mustPerformChange:boolean):void {
+		const oldDeltaPointer:number = this.deltaPointer;
+
 		//Go back and undo any deltas that should have been done after this delta
-		let i = this.deltas.length-1;
-		let d;
-		for(; i>=0; i--) {
-			d = this.deltas[i];
-			if(d.getTimestamp() > delta.getTimestamp()) {
-				d.undoAction(this);
-			} else {
-				break;
-			}
+		const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(delta.getTimestamp());
+		this.moveDeltaPointer(lastDeltaBefore);
+		this.deltas.splice(this.deltaPointer+1, 0, delta)
+		if(mustPerformChange === false) {
+			this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
 		}
-		// Insert this delta where it should be
-		const insertAt = i+1;
-		this.deltas.splice(insertAt, 0, delta);
-
-		if(mustPerformChange) {
-			i = insertAt; // will include this delta as we move forward
-		} else {
-			i = insertAt + 1;
-		}
-
-		// Go forward and do allof the deltas that come before.
-		for(; i<this.deltas.length; i++) {
-			d = this.deltas[i];
-			d.doAction(this);
-		}
+		// Go forward and do all of the deltas that come after.
+		this.moveDeltaPointer(oldDeltaPointer+1);
 	}
 	public removeUserCursors(user) {
 		this.remoteCursors.removeUserCursors(user);
@@ -450,26 +480,26 @@ export class EditorStateTracker {
 			es.removeUserCursors(user);
 		});
 	}
-	public addHighlight(editorID:number, range:SerializedRange):number {
+	public addHighlight(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):number {
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
-			return editorState.addHighlight(range);
+			return editorState.addHighlight(range, timestamp, extraInfo);
 		} else {
 			return -1;
 		}
 	}
-	public removeHighlight(editorID:number, highlightID:number):boolean {
+	public removeHighlight(editorID:number, highlightID:number, extraInfo={}):boolean {
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
-			return editorState.removeHighlight(highlightID);
+			return editorState.removeHighlight(highlightID, extraInfo);
 		} else {
 			return false;
 		}
 	}
-	public focus(editorID:number, range:SerializedRange):boolean {
+	public focus(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):boolean {
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
-			return editorState.focus(range);
+			return editorState.focus(range, timestamp, extraInfo);
 		} else {
 			return false;
 		}
