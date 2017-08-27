@@ -139,6 +139,7 @@ class EditChange {
     }
     serialize() { return this.serializedState; }
 }
+exports.EditChange = EditChange;
 class EditDelta {
     /**
      * Represents a change made to the text of a document. Contains a series of EditChange
@@ -392,8 +393,9 @@ class EditorStateTracker {
     handleEvent(event, mustPerformChange) {
         const editorState = this.getEditorState(event.id);
         if (editorState) {
-            editorState.addDelta(event, mustPerformChange);
+            return editorState.addDelta(event, mustPerformChange);
         }
+        return null;
     }
     ;
     getEditorState(editorID) {

@@ -1,18 +1,26 @@
 import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
-import { EditorStateTracker } from './editor-state-tracker';
+import { EditorStateTracker, UndoableDelta, EditChange } from './editor-state-tracker';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
 
-export class EditGroup extends EventEmitter {
+export interface DisplayableMessage {
+	getTimestamp():number; }
 
+export class EditGroup extends EventEmitter implements DisplayableMessage {
+	constructor(private parent:MessageGroups, private deltas:Array<UndoableDelta>) {
+		super();
+	}
+	public getTimestamp():number { return this.deltas[0].getTimestamp(); }
+	public getDeltas():Array<UndoableDelta> { return this.deltas; }
+	public addDelta(delta:UndoableDelta) { this.deltas.push(delta); }
 }
 
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
  */
-export class MessageGroup extends EventEmitter {
+export class MessageGroup extends EventEmitter implements DisplayableMessage {
 	constructor(private parent:MessageGroups, private sender:ChatUser, private timestamp:number, messages: Array<any>) {
 		super();
 		this.doAddMessage.apply(this, messages);
@@ -90,10 +98,9 @@ export class MessageGroup extends EventEmitter {
 		});
 	};
 
-
 	public getSender():ChatUser { return this.sender; }
-	public getTimestamp() { return this.timestamp; }
 	public getMessages():Array<any> { return this.messages; }
+	public getTimestamp():number { return this.timestamp };
 };
 
 /*
@@ -104,7 +111,7 @@ export class MessageGroups extends EventEmitter {
 		super();
 	};
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
-	private messageGroups: Array<MessageGroup> = [];
+	private messageGroups: Array<DisplayableMessage> = [];
 	private messages:Array<any> = [];
 
 	public getMessageHistory():Array<any> {
@@ -122,7 +129,7 @@ export class MessageGroups extends EventEmitter {
 		// 	data.editorID = editorID;
 		// }
 
-		if (!lastMessageGroup || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
+		if (!lastMessageGroup || !(lastMessageGroup instanceof MessageGroup) || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
 			// Add to a new group
 			const sender = this.chatUserList.getUser(data.uid);
 			const messageGroup = new MessageGroup(this, sender, data.timestamp, [data]);
@@ -131,11 +138,11 @@ export class MessageGroups extends EventEmitter {
 			(this as any).emit('group-added', {
 				messageGroup: messageGroup
 			});
-			(messageGroup as any).on('message-added', (event) => {
-				(this as any).emit('message-added', event);
-			});
 			(messageGroup as any).on('message-will-be-added', (event) => {
 				(this as any).emit('message-will-be-added', event);
+			});
+			(messageGroup as any).on('message-added', (event) => {
+				(this as any).emit('message-added', event);
 			});
 		} else {
 			// Add to the latest group
@@ -143,8 +150,16 @@ export class MessageGroups extends EventEmitter {
 		}
 	}
 	public getMessageGroups() { return this.messageGroups; }
-	public addEdit(data) {
-		console.log(data);
+	public addDelta(delta:UndoableDelta) {
+		let lastMessageGroup = _.last(this.messageGroups);
+		let groupToAddTo = lastMessageGroup;
+
+		if (!lastMessageGroup || !(lastMessageGroup instanceof EditGroup) || (lastMessageGroup.getTimestamp() < delta.getTimestamp()- this.messageGroupingTimeThreshold)) {
+			const editGroup = new EditGroup(this, [delta]);
+			this.messageGroups.push(editGroup);
+		} else {
+			groupToAddTo.addDelta(delta);
+		}
 	}
 
 	/**

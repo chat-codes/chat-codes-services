@@ -4,6 +4,14 @@ const _ = require("underscore");
 const events_1 = require("events");
 const showdown = require("showdown");
 class EditGroup extends events_1.EventEmitter {
+    constructor(parent, deltas) {
+        super();
+        this.parent = parent;
+        this.deltas = deltas;
+    }
+    getTimestamp() { return this.deltas[0].getTimestamp(); }
+    getDeltas() { return this.deltas; }
+    addDelta(delta) { this.deltas.push(delta); }
 }
 exports.EditGroup = EditGroup;
 /*
@@ -90,8 +98,9 @@ class MessageGroup extends events_1.EventEmitter {
     }
     ;
     getSender() { return this.sender; }
-    getTimestamp() { return this.timestamp; }
     getMessages() { return this.messages; }
+    getTimestamp() { return this.timestamp; }
+    ;
 }
 exports.MessageGroup = MessageGroup;
 ;
@@ -120,7 +129,7 @@ class MessageGroups extends events_1.EventEmitter {
         // 	const editorID = editor.getEditorID();
         // 	data.editorID = editorID;
         // }
-        if (!lastMessageGroup || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
+        if (!lastMessageGroup || !(lastMessageGroup instanceof MessageGroup) || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
             // Add to a new group
             const sender = this.chatUserList.getUser(data.uid);
             const messageGroup = new MessageGroup(this, sender, data.timestamp, [data]);
@@ -128,11 +137,11 @@ class MessageGroups extends events_1.EventEmitter {
             this.emit('group-added', {
                 messageGroup: messageGroup
             });
-            messageGroup.on('message-added', (event) => {
-                this.emit('message-added', event);
-            });
             messageGroup.on('message-will-be-added', (event) => {
                 this.emit('message-will-be-added', event);
+            });
+            messageGroup.on('message-added', (event) => {
+                this.emit('message-added', event);
             });
         }
         else {
@@ -141,8 +150,16 @@ class MessageGroups extends events_1.EventEmitter {
         }
     }
     getMessageGroups() { return this.messageGroups; }
-    addEdit(data) {
-        console.log(data);
+    addDelta(delta) {
+        let lastMessageGroup = _.last(this.messageGroups);
+        let groupToAddTo = lastMessageGroup;
+        if (!lastMessageGroup || !(lastMessageGroup instanceof EditGroup) || (lastMessageGroup.getTimestamp() < delta.getTimestamp() - this.messageGroupingTimeThreshold)) {
+            const editGroup = new EditGroup(this, [delta]);
+            this.messageGroups.push(editGroup);
+        }
+        else {
+            groupToAddTo.addDelta(delta);
+        }
     }
     /**
      * Returns true if there are no messages and false otherwise

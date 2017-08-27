@@ -4,7 +4,7 @@ import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
-import { EditorStateTracker } from './editor-state-tracker';
+import { UndoableDelta, EditorStateTracker } from './editor-state-tracker';
 
 declare function require(name:string);
 declare var __dirname:string;
@@ -131,7 +131,8 @@ export class ChannelCommunicationService extends EventEmitter {
 
         // Track when something happens in the editor
         this.commLayer.bind(this.channelName, 'editor-event', (data) => {
-			this.editorStateTracker.handleEvent(data, true);
+    		const delta:UndoableDelta = this.editorStateTracker.handleEvent(data, true);
+            this.messageGroups.addDelta(delta);
             (this as any).emit('editor-event', data);
         });
 
@@ -303,17 +304,17 @@ export class ChannelCommunicationService extends EventEmitter {
 
     /**
      * The user modified something in the editor
-     * @param {[type]} delta       The change
+     * @param {[type]} serializedDelta       The change
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
-    public emitEditorChanged(delta, remote=true):void {
-        _.extend(delta, {
+    public emitEditorChanged(serializedDelta, remote=true):void {
+        _.extend(serializedDelta, {
 			timestamp: this.getTimestamp(),
             uid: this.myID,
 			remote: remote
         });
-		this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
-        this.commLayer.trigger(this.channelName, 'editor-event', delta);
+		const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
+        this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
     }
 
     /**

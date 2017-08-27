@@ -99,7 +99,7 @@ interface EditorWrapper {
 /**
  * A change to an editor or environment that can be done and undone
  */
-interface UndoableDelta {
+export interface UndoableDelta {
     doAction(editorState:EditorState):void;
 	undoAction(editorState:EditorState):void;
 	getTimestamp():number;
@@ -153,7 +153,7 @@ class GrammarDelta implements UndoableDelta {
 	public serialize() { return this.serializedState; }
 }
 
-class EditChange implements UndoableDelta {
+export class EditChange implements UndoableDelta {
 	private oldRangeAnchor; // Anchors are important to keep track of where this change should be..
 	private newRangeAnchor; // ..in case any edits need to be inserted before this one
 	private oldRange:SerializedRange;
@@ -442,11 +442,12 @@ export class EditorStateTracker {
 		return _.values(this.editorStates);
 	}
 
-	public handleEvent(event, mustPerformChange:boolean) {
+	public handleEvent(event, mustPerformChange:boolean):UndoableDelta {
 		const editorState = this.getEditorState(event.id);
 		if(editorState) {
-			editorState.addDelta(event, mustPerformChange);
+			return editorState.addDelta(event, mustPerformChange);
 		}
+		return null;
 	};
 
 	public getEditorState(editorID:number):EditorState {

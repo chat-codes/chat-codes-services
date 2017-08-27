@@ -113,7 +113,8 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         });
         // Track when something happens in the editor
         this.commLayer.bind(this.channelName, 'editor-event', (data) => {
-            this.editorStateTracker.handleEvent(data, true);
+            const delta = this.editorStateTracker.handleEvent(data, true);
+            this.messageGroups.addDelta(delta);
             this.emit('editor-event', data);
         });
         // Track when the user moves the cursor
@@ -268,17 +269,17 @@ class ChannelCommunicationService extends events_1.EventEmitter {
     }
     /**
      * The user modified something in the editor
-     * @param {[type]} delta       The change
+     * @param {[type]} serializedDelta       The change
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
-    emitEditorChanged(delta, remote = true) {
-        _.extend(delta, {
+    emitEditorChanged(serializedDelta, remote = true) {
+        _.extend(serializedDelta, {
             timestamp: this.getTimestamp(),
             uid: this.myID,
             remote: remote
         });
-        this.editorStateTracker.handleEvent(delta, delta.type !== 'edit');
-        this.commLayer.trigger(this.channelName, 'editor-event', delta);
+        const delta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
+        this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
     }
     /**
      * The cursor position for the user changed
