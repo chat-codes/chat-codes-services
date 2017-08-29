@@ -224,6 +224,12 @@ export class MessageGroups extends EventEmitter {
 			groupToAddTo = new MessageGroup(this, this.chatUserList, this.editorStateTracker, [data]);
 			let insertionIndex = this.getInsertionIndex(data.timestamp);
 
+
+			(this as any).emit('group-will-be-added', {
+				messageGroup: groupToAddTo,
+				insertionIndex: insertionIndex
+			});
+
 			this.messageGroups.splice(insertionIndex, 0, groupToAddTo);
 
 			(this as any).emit('group-added', {
@@ -249,6 +255,12 @@ export class MessageGroups extends EventEmitter {
 		} else {
 			groupToAddTo = new EditGroup(this, [delta]);
 			let insertionIndex = this.getInsertionIndex(delta.getTimestamp());
+
+			(this as any).emit('group-will-be-added', {
+				messageGroup: groupToAddTo,
+				insertionIndex: insertionIndex
+			});
+
 			this.messageGroups.splice(insertionIndex, 0, groupToAddTo);
 
 			(this as any).emit('group-added', {

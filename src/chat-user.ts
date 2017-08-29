@@ -16,13 +16,14 @@ export class ChatUser extends EventEmitter {
     constructor(private isMe:boolean, private id:string, private name:string, private active:boolean, private colorIndex:number) {
         super();
     }
-    public typingStatus:string='IDLE';
+    private typingStatus:string='IDLE';
     public getIsMe():boolean { return this.isMe; };
     public isActive():boolean { return this.active; };
     public getID():string { return this.id; }
     public getName():string { return this.name; }
     public getColorIndex():number { return this.colorIndex; };
     public setIsActive(active:boolean):void { this.active = active; };
+    public getTypingStatus():string { return this.typingStatus; };
 
     public setTypingStatus(status:string) {
         this.typingStatus = status;

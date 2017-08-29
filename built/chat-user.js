@@ -33,6 +33,8 @@ class ChatUser extends events_1.EventEmitter {
     ;
     setIsActive(active) { this.active = active; }
     ;
+    getTypingStatus() { return this.typingStatus; }
+    ;
     setTypingStatus(status) {
         this.typingStatus = status;
         this.emit('typingStatus', {
