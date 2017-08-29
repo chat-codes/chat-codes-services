@@ -2,6 +2,7 @@ import * as _ from 'underscore';
 import * as FuzzySet from 'fuzzyset.js';
 import { EventEmitter } from 'events';
 import { ChannelCommunicationService } from './communication-service';
+import { ChatUser, ChatUserList } from './chat-user';
 
 interface SerializedRange {
 	start: Array<number>,
@@ -103,6 +104,8 @@ export interface UndoableDelta {
     doAction(editorState:EditorState):void;
 	undoAction(editorState:EditorState):void;
 	getTimestamp():number;
+	getAuthor():ChatUser;
+	getEditorState():EditorState;
 	serialize();
 }
 
@@ -110,7 +113,7 @@ class TitleDelta implements UndoableDelta {
     /**
      * Represents a change where the title of the editor window has changed
      */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.oldTitle = serializedState.oldTitle;
 		this.newTitle = serializedState.newTitle;
 		this.timestamp = serializedState.timestamp;
@@ -128,12 +131,14 @@ class TitleDelta implements UndoableDelta {
 	public serialize() {
 		return this.serializedState;
 	}
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 class GrammarDelta implements UndoableDelta {
 	/**
 	 * Represents a change where the grammar (think of syntax highlighting rules) has changed
 	 */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.oldGrammarName = serializedState.oldGrammarName;
 		this.newGrammarName = serializedState.newGrammarName;
 		this.timestamp = serializedState.timestamp;
@@ -151,6 +156,8 @@ class GrammarDelta implements UndoableDelta {
 		editorWrapper.setGrammar(this.oldGrammarName);
     }
 	public serialize() { return this.serializedState; }
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 
 export class EditChange implements UndoableDelta {
@@ -165,7 +172,7 @@ export class EditChange implements UndoableDelta {
 	/**
 	 * Represents a change where text has been edited
 	 */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.oldRange = serializedState.oldRange;
 		this.newRange = serializedState.newRange;
 		this.oldText = serializedState.oldText;
@@ -188,6 +195,8 @@ export class EditChange implements UndoableDelta {
 		// console.log("UNDO", JSON.stringify(this.newRange), '"'+this.oldText+'"');
     }
 	public serialize() { return this.serializedState; }
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 
 class EditDelta implements UndoableDelta {
@@ -195,10 +204,10 @@ class EditDelta implements UndoableDelta {
 	 * Represents a change made to the text of a document. Contains a series of EditChange
 	 * objects representing the individual changes
 	 */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.timestamp = serializedState.timestamp;
 		this.changes = serializedState.changes.map((ss) => {
-			return new EditChange(ss);
+			return new EditChange(ss, this.author, this.editorState);
 		});
 	}
 	private changes:Array<EditChange>;
@@ -215,13 +224,15 @@ class EditDelta implements UndoableDelta {
 		});
     }
 	public serialize() { return this.serializedState; }
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 
 class OpenDelta implements UndoableDelta {
 	/**
 	 * Represents a new text editor being opened
 	 */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.grammarName = serializedState.grammarName;
 		this.title = serializedState.title;
 		this.timestamp = serializedState.timestamp;
@@ -248,12 +259,14 @@ class OpenDelta implements UndoableDelta {
 		editorWrapper.setText('');
 	}
 	public serialize() { return this.serializedState; }
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 class DestroyDelta implements UndoableDelta {
 	/**
 	 * Represents a text editor being closed.
 	 */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.timestamp = serializedState.timestamp;
 	}
 	private timestamp:number;
@@ -265,13 +278,15 @@ class DestroyDelta implements UndoableDelta {
 		editorState.isOpen = true;
 	}
 	public serialize() { return this.serializedState; }
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 class ModifiedDelta implements UndoableDelta {
 	/**
 	 * Represents a change to the *modified* flag (which marks if a file has been changed
 	 * without having been saved)
 	 */
-    constructor(private serializedState) {
+    constructor(private serializedState, private author:ChatUser, private editorState:EditorState) {
 		this.timestamp = serializedState.timestamp;
 		this.modified = serializedState.modified;
 		this.oldModified = serializedState.oldModified;
@@ -287,6 +302,8 @@ class ModifiedDelta implements UndoableDelta {
 		editorState.modified = this.oldModified;
 	}
 	public serialize() { return this.serializedState; }
+	public getAuthor():ChatUser { return this.author; };
+	public getEditorState():EditorState { return this.editorState; };
 }
 
 
@@ -299,7 +316,7 @@ export class EditorState {
 	private title:string;
 	private modified:boolean;
 	private deltaPointer:number=-1;
-    constructor(suppliedState, private editorWrapper, mustPerformChange:boolean) {
+    constructor(suppliedState, private editorWrapper, private userList:ChatUserList, mustPerformChange:boolean) {
         let state = _.extend({
             isOpen: true,
             deltas: [],
@@ -314,12 +331,12 @@ export class EditorState {
 			});
 		}
 		state.cursors.forEach((c) => {
-
+			console.log(c);
 		});
 	}
 	public serialize() {
 		return {
-			deltas: _.map(this.deltas, d => d.serialize() ),
+			deltas: _.map(this.getDeltas(), d => d.serialize() ),
 			isOpen: this.isOpen,
 			id: this.editorID,
 			title: this.title,
@@ -327,6 +344,7 @@ export class EditorState {
 			remoteCursors: this.remoteCursors.serialize()
 		}
 	};
+	public getDeltas():Array<UndoableDelta> { return this.deltas; };
 	public setTitle(newTitle:string):void { this.title = newTitle; };
 	public setIsOpen(val:boolean):void { this.isOpen = val; };
 	public getEditorWrapper():EditorWrapper { return this.editorWrapper; };
@@ -390,20 +408,21 @@ export class EditorState {
 
 	public addDelta(serializedDelta, mustPerformChange:boolean):UndoableDelta {
 		const {type} = serializedDelta;
+		const author:ChatUser = this.userList.getUser(serializedDelta.uid);
 		let delta;
 
 		if(type === 'open') {
-			delta = new OpenDelta(serializedDelta);
+			delta = new OpenDelta(serializedDelta, author, this);
 		} else if(type === 'edit') {
-			delta = new EditDelta(serializedDelta);
+			delta = new EditDelta(serializedDelta, author, this);
 		} else if(type === 'modified') {
-			delta = new ModifiedDelta(serializedDelta);
+			delta = new ModifiedDelta(serializedDelta, author, this);
 		} else if(type === 'grammar') {
-			delta = new GrammarDelta(serializedDelta);
+			delta = new GrammarDelta(serializedDelta, author, this);
 		} else if(type === 'title') {
-			delta = new TitleDelta(serializedDelta);
+			delta = new TitleDelta(serializedDelta, author, this);
 		} else if(type === 'destroy') {
-			delta = new DestroyDelta(serializedDelta);
+			delta = new DestroyDelta(serializedDelta, author, this);
 		} else {
 			delta = null;
 			console.log(serializedDelta);
@@ -435,8 +454,7 @@ export class EditorState {
 
 export class EditorStateTracker {
     private editorStates:{[editorID:number]: EditorState} = {};
-    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService) {
-	}
+    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) { }
 
 	public getAllEditors():Array<EditorState> {
 		return _.values(this.editorStates);
@@ -466,7 +484,7 @@ export class EditorStateTracker {
 	public onEditorOpened(state, mustPerformChange:boolean):EditorState {
 		let editorState = this.getEditorState(state.id);
 		if(!editorState) {
-			editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
+			editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
 			this.editorStates[state.id] = editorState;
 		}
 		return editorState;

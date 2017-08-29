@@ -23,6 +23,16 @@ class ChatUser extends events_1.EventEmitter {
         this.colorIndex = colorIndex;
         this.typingStatus = 'IDLE';
     }
+    getIsMe() { return this.isMe; }
+    ;
+    isActive() { return this.active; }
+    ;
+    getID() { return this.id; }
+    getName() { return this.name; }
+    getColorIndex() { return this.colorIndex; }
+    ;
+    setIsActive(active) { this.active = active; }
+    ;
     setTypingStatus(status) {
         this.typingStatus = status;
         this.emit('typingStatus', {
@@ -81,9 +91,9 @@ class ChatUserList extends events_1.EventEmitter {
      */
     remove(id) {
         for (var i = 0; i < this.activeUsers.length; i++) {
-            var id_i = this.activeUsers[i].id;
+            var id_i = this.activeUsers[i].getID();
             if (id_i === id) {
-                this.activeUsers[i].active = false;
+                this.activeUsers[i].setIsActive(false);
                 this.activeUsers.splice(i, 1);
                 this.emit('userRemoved', {
                     id: id
@@ -94,7 +104,7 @@ class ChatUserList extends events_1.EventEmitter {
     }
     getUser(id) {
         for (var i = 0; i < this.allUsers.length; i++) {
-            var id_i = this.allUsers[i].id;
+            var id_i = this.allUsers[i].getID();
             if (id_i === id) {
                 return this.allUsers[i];
             }
@@ -103,7 +113,7 @@ class ChatUserList extends events_1.EventEmitter {
     }
     getMe() {
         for (var i = 0; i < this.allUsers.length; i++) {
-            if (this.allUsers[i].isMe) {
+            if (this.allUsers[i].getIsMe()) {
                 return this.allUsers[i];
             }
         }

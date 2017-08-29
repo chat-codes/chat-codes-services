@@ -4,7 +4,7 @@ import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
-import { UndoableDelta, EditorStateTracker } from './editor-state-tracker';
+import { UndoableDelta, EditorStateTracker, EditorState } from './editor-state-tracker';
 
 declare function require(name:string);
 declare var __dirname:string;
@@ -83,7 +83,7 @@ export class ChannelCommunicationService extends EventEmitter {
      */
     constructor(private commService:CommunicationService, private channelName:string, EditorWrapperClass) {
         super();
-        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this);
+        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new MessageGroups(this.userList, this.editorStateTracker);
 
         this.commLayer = commService.commLayer; // Pop this object up a level
@@ -99,18 +99,31 @@ export class ChannelCommunicationService extends EventEmitter {
             }, data));
         });
 
-        // Track when someone sends the complete history of messages
-        this.commLayer.bind(this.channelName, 'message-history', (data) => {
+        this.commLayer.bind(this.channelName, 'history', (data) => {
             if(data.forUser === this.myID) {
+                const {editorState, allUsers, messageHistory} = data;
                 // Add every user from the past to our list
-                data.allUsers.forEach((u) => {
+                allUsers.forEach((u) => {
                     this.userList.add(false, u.id, u.name, u.active);
                 });
-                _.each(data.history, (m) => {
+
+                _.each(editorState, (serializedEditorState) => {
+                    const editorState:EditorState = this.editorStateTracker.onEditorOpened(serializedEditorState, true);
+                    _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
+                        this.messageGroups.addDelta(delta);
+                    });
+                });
+                (this as any).emit('editor-state', data);
+
+                _.each(messageHistory, (m) => {
                     this.messageGroups.addMessage(m);
                     (this as any).emit('message', _.extend({
                         sender: this.userList.getUser(m.uid)
                     }, m));
+                });
+                (this as any).emit('history', {
+                    userList: this.userList,
+                    editorState: this.editorStateTracker
                 });
             }
         });
@@ -166,22 +179,13 @@ export class ChannelCommunicationService extends EventEmitter {
             (this as any).emit('cursor-event', data);
         });
 
-        // The complete editor state was sent
-    	this.commLayer.bind(this.channelName, 'editor-state', (data) => {
-            const {forUser, state} = data;
-            // If it was sent specifically to me
-            if(forUser === this.myID) {
-                _.each(state, (serializedEditorState) => {
-                    this.editorStateTracker.onEditorOpened(serializedEditorState, true);
-                });
-                (this as any).emit('editor-state', data);
-            }
-    	});
-
         // A new editor was opened
     	this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
             // const mustPerformChange = !this.isRoot();
-    		const editorState = this.editorStateTracker.onEditorOpened(data, true);
+    		const editorState:EditorState = this.editorStateTracker.onEditorOpened(data, true);
+            _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
+                this.messageGroups.addDelta(delta);
+            });
             (this as any).emit('editor-opened', data);
     	});
 
@@ -207,12 +211,12 @@ export class ChannelCommunicationService extends EventEmitter {
             // If I'm root, then send over the current editor state and past message history to every new user
             if(this.isRoot()) {
                 const memberID = member.id;
-                const serializedState = this.editorStateTracker.serializeEditorStates();
-                this.commLayer.trigger(this.channelName, 'editor-state', {
+                this.commLayer.trigger(this.channelName, 'history', {
                     forUser: memberID,
-                    state: serializedState
+                    editorState: this.editorStateTracker.serializeEditorStates(),
+                    allUsers: this.userList.serialize(),
+                    messageHistory: this.messageGroups.getMessageHistory()
                 });
-                this.sendMessageHistory(memberID);
             }
         });
         //When a user leaves, remove them from the user list and remove their cursor
@@ -314,6 +318,7 @@ export class ChannelCommunicationService extends EventEmitter {
 			remote: remote
         });
 		const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
+        this.messageGroups.addDelta(delta);
         this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
     }
 
@@ -371,18 +376,6 @@ export class ChannelCommunicationService extends EventEmitter {
             protocol: 'http',
             host: 'chat.codes',
             pathname: this.channelName
-        });
-    }
-
-    /**
-     * Sends the complete history of chat messages
-     * @param {[type]} forUser The user for whom this history is intended
-     */
-    public sendMessageHistory(forUser):void {
-        this.commLayer.trigger(this.channelName, 'message-history', {
-            history: this.messageGroups.getMessageHistory(),
-            allUsers: this.userList.serialize(),
-            forUser: forUser
         });
     }
 

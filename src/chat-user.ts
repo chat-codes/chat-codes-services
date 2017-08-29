@@ -13,10 +13,16 @@ export class ChatUser extends EventEmitter {
      * @param  {boolean} active     Whether this user is currently in the channel
      * @param  {number}  colorIndex The user's color
      */
-    constructor(public isMe:boolean, public id:string, public name:string, public active:boolean, public colorIndex:number) {
+    constructor(private isMe:boolean, private id:string, private name:string, private active:boolean, private colorIndex:number) {
         super();
     }
     public typingStatus:string='IDLE';
+    public getIsMe():boolean { return this.isMe; };
+    public isActive():boolean { return this.active; };
+    public getID():string { return this.id; }
+    public getName():string { return this.name; }
+    public getColorIndex():number { return this.colorIndex; };
+    public setIsActive(active:boolean):void { this.active = active; };
 
     public setTypingStatus(status:string) {
         this.typingStatus = status;
@@ -78,9 +84,9 @@ export class ChatUserList extends EventEmitter {
      */
     public remove(id:string):void {
         for(var i = 0; i<this.activeUsers.length; i++) {
-            var id_i = this.activeUsers[i].id;
+            var id_i = this.activeUsers[i].getID();
             if(id_i === id) {
-                this.activeUsers[i].active = false;
+                this.activeUsers[i].setIsActive(false);
                 this.activeUsers.splice(i, 1);
                 (this as any).emit('userRemoved', {
                     id: id
@@ -92,7 +98,7 @@ export class ChatUserList extends EventEmitter {
 
     public getUser(id:string):ChatUser {
         for(var i = 0; i<this.allUsers.length; i++) {
-            var id_i = this.allUsers[i].id;
+            var id_i = this.allUsers[i].getID();
             if(id_i === id) {
                 return this.allUsers[i];
             }
@@ -102,7 +108,7 @@ export class ChatUserList extends EventEmitter {
 
     public getMe():ChatUser {
         for(var i = 0; i<this.allUsers.length; i++) {
-            if(this.allUsers[i].isMe) {
+            if(this.allUsers[i].getIsMe()) {
                 return this.allUsers[i];
             }
         }

@@ -1,35 +1,91 @@
 import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
-import { EditorStateTracker, UndoableDelta, EditChange } from './editor-state-tracker';
+import { EditorStateTracker, UndoableDelta, EditChange, EditorState } from './editor-state-tracker';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
 
 export interface DisplayableMessage {
-	getTimestamp():number; }
+	getTimestamp():number;
+	getEarliestTimestamp():number;
+	getLatestTimestamp():number;
+	addItem(item):number;
+}
 
 export class EditGroup extends EventEmitter implements DisplayableMessage {
 	constructor(private parent:MessageGroups, private deltas:Array<UndoableDelta>) {
 		super();
 	}
-	public getTimestamp():number { return this.deltas[0].getTimestamp(); }
+	public getEarliestTimestamp():number { return _.first(this.deltas).getTimestamp(); }
+	public getLatestTimestamp():number { return _.last(this.deltas).getTimestamp(); }
+	public getTimestamp():number { return this.getLatestTimestamp(); }
 	public getDeltas():Array<UndoableDelta> { return this.deltas; }
-	public addDelta(delta:UndoableDelta) { this.deltas.push(delta); }
+	public addItem(delta:UndoableDelta):number {
+		(this as any).emit('delta-will-be-added', {
+			group: this,
+			delta: delta
+		});
+		const insertionIndex = this.getInsertionIndex(delta.getTimestamp());
+		this.deltas.splice(insertionIndex, 0, delta);
+		(this as any).emit('delta-added', {
+			group: this,
+			insertionIndex: insertionIndex,
+			delta: delta
+		});
+		return insertionIndex;
+	}
+	public getEditorStates():Array<EditorState> {
+		const editorStates = this.getDeltas().map(delta => delta.getEditorState() );
+		return _.unique(editorStates);
+	}
+	public getAuthors():Array<ChatUser> {
+		const authors = this.getDeltas().map(delta => delta.getAuthor() )
+		return _.unique(authors);
+	}
+	private getInsertionIndex(timestamp:number):number {
+		const deltas:Array<UndoableDelta> = this.getDeltas();
+		for(let i = deltas.length-1; i>=0; i--) {
+			const delta = this.deltas[i];
+			if(delta.getTimestamp() < timestamp) {
+				return i+1;
+			}
+		}
+		return 0;
+	}
 }
 
-/*
- * MessageGroup represents a group of messages that were sent by the same user *around*
- * the same time with no other users interrupting.
- */
-export class MessageGroup extends EventEmitter implements DisplayableMessage {
-	constructor(private parent:MessageGroups, private sender:ChatUser, private timestamp:number, messages: Array<any>) {
-		super();
-		this.doAddMessage.apply(this, messages);
-	}
+export class Message {
+	constructor(private sender:ChatUser, private timestamp:number, private message:string, editorStateTracker:EditorStateTracker) {
+		const htmlBuilder = document.createElement('li');
+		htmlBuilder.innerHTML = this.converter.makeHtml(this.message);
+		_.each(htmlBuilder.querySelectorAll('a'), (a) => {
+			const fileLinkInfo = this.matchFileLinkAttributes(a.getAttribute('href'));
+			if(fileLinkInfo) {
+				const {fileName, start, end} = fileLinkInfo;
+				if(isNaN(start.column)) { start.column = -1; }
+				if(isNaN(end.row)) { end.row = start.row; } // just one line
+				if(isNaN(end.column)) { end.column = -1; }
 
-	private messages: Array<any> = [];
+				const editorState = editorStateTracker.fuzzyMatch(fileName);
+				const fileID = editorState ? editorState.getEditorID() : fileName;
+
+				a.setAttribute('href', 'javascript:void(0)');
+				a.setAttribute('class', 'line_ref');
+
+				a.setAttribute('data-file', fileID);
+				a.setAttribute('data-start', [start.row, start.column].join(','));
+				a.setAttribute('data-end', [end.row, end.column].join(','));
+			}
+		});
+		this.html = htmlBuilder.innerHTML;
+	}
+	private html:string;
+	public getSender():ChatUser { return this.sender; };
+	public getTimestamp():number { return this.timestamp; };
+	public getMessage():string { return this.message; };
+	public getHTML():string { return this.html; };
+
 	private converter = new showdown.Converter({simplifiedAutoLink: true});
 	private fileLinkRegexp = new RegExp('^(.+):\s*L(\\d+)(\\s*,\\s*(\\d+))?(\s*-\s*L(\\d+)(\\s*,\\s*(\\d+))?)?$')
-
 	private matchFileLinkAttributes(str) {
 		const match = str.match(this.fileLinkRegexp);
 		if(match) {
@@ -47,7 +103,20 @@ export class MessageGroup extends EventEmitter implements DisplayableMessage {
 		} else {
 			return false;
 		}
+	};
+}
+
+/*
+ * MessageGroup represents a group of messages that were sent by the same user *around*
+ * the same time with no other users interrupting.
+ */
+export class MessageGroup extends EventEmitter implements DisplayableMessage {
+	constructor(private parent:MessageGroups, private chatUserList:ChatUserList, private editorStateTracker:EditorStateTracker, messages: Array<any>) {
+		super();
+		_.each(messages, (m) => { this.doAddMessage(m); });
 	}
+
+	private messages: Array<Message> = [];
 
 	private getLinkDataInfo(html):String{
 		var htmlLatter = html.substring(html.indexOf("<a href=\"") + "<a href=\"".length);
@@ -55,52 +124,54 @@ export class MessageGroup extends EventEmitter implements DisplayableMessage {
 		return linkedDataInfo;
 	}
 
-	private doAddMessage(...messages):void {
+	private doAddMessage(message) {
 		const editorStateTracker = this.parent.editorStateTracker;
-		_.each(messages, (message) => {
-			const htmlBuilder = document.createElement('li');
-			htmlBuilder.innerHTML = this.converter.makeHtml(message.message);
-			_.each(htmlBuilder.querySelectorAll('a'), (a) => {
-				const fileLinkInfo = this.matchFileLinkAttributes(a.getAttribute('href'));
-				if(fileLinkInfo) {
-					const {fileName, start, end} = fileLinkInfo;
-					if(isNaN(start.column)) { start.column = -1; }
-					if(isNaN(end.row)) { end.row = start.row; } // just one line
-					if(isNaN(end.column)) { end.column = -1; }
 
-					const editorState = editorStateTracker.fuzzyMatch(fileName);
-					const fileID = editorState ? editorState.getEditorID() : fileName;
+		const sender = this.chatUserList.getUser(message.uid);
+		this.sender = sender;
 
-					a.setAttribute('href', 'javascript:void(0)');
-					a.setAttribute('class', 'line_ref');
-
-					a.setAttribute('data-file', fileID);
-					a.setAttribute('data-start', [start.row, start.column].join(','));
-					a.setAttribute('data-end', [end.row, end.column].join(','));
-				}
-			});
-			message.html = htmlBuilder.innerHTML;
-			this.messages.push(message);
-		});
+		const messageObject = new Message(sender, message.timestamp, message.message, this.editorStateTracker)
+		const insertionIndex = this.getInsertionIndex(messageObject.getTimestamp());
+		this.messages.splice(insertionIndex, 0, messageObject);
+		return {
+			insertionIndex: insertionIndex,
+			messageObject: messageObject
+		};
 	};
 
-	public addMessage(message) {
+	public addItem(message):number {
 		(this as any).emit('message-will-be-added', {
 			group: this,
 			message: message
 		});
 
-		this.doAddMessage(message);
+		const {insertionIndex, messageObject} = this.doAddMessage(message);
 
 		(this as any).emit('message-added', {
 			group: this,
-			message: message
+			message: messageObject,
+			insertionIndex: insertionIndex
 		});
+		return insertionIndex;
 	};
 
+	private sender:ChatUser;
 	public getSender():ChatUser { return this.sender; }
-	public getMessages():Array<any> { return this.messages; }
-	public getTimestamp():number { return this.timestamp };
+	public getMessages():Array<Message> { return this.messages; }
+	public getTimestamp():number { return this.getLatestTimestamp(); };
+	public getEarliestTimestamp():number { return _.first(this.messages).timestamp; }
+	public getLatestTimestamp():number { return _.last(this.messages).timestamp; }
+
+	private getInsertionIndex(timestamp:number):number {
+		const messages:Array<Message> = this.getMessages();
+		for(let i = messages.length-1; i>=0; i--) {
+			const message = this.messages[i];
+			if(message.getTimestamp() < timestamp) {
+				return i+1;
+			}
+		}
+		return 0;
+	}
 };
 
 /*
@@ -117,48 +188,79 @@ export class MessageGroups extends EventEmitter {
 	public getMessageHistory():Array<any> {
 		return this.messages;
 	}
+	private getAppropriateGroup(checkMatch:(DisplayableMessage)=>boolean, CheckClass) {
+		for(let i = this.messageGroups.length-1; i>=0; i--) {
+			const messageGroup = this.messageGroups[i];
+			// if(messageGroup instanceof CheckClass) {
+			if(checkMatch(messageGroup)) {
+				return messageGroup;
+			} else {
+				break;
+			}
+			// }
+		}
+		return null;
+	}
+	private getInsertionIndex(timestamp:number):number {
+		for(let i = this.messageGroups.length-1; i>=0; i--) {
+			const messageGroup = this.messageGroups[i];
+			if(messageGroup.getLatestTimestamp() < timestamp) {
+				return i+1;
+			}
+		}
+		return 0;
+	}
+
 	public addMessage(data) {
 		this.messages.push(data);
-
-		let lastMessageGroup = _.last(this.messageGroups);
-		let groupToAddTo = lastMessageGroup;
-
-		// const editor = this.editorStateTracker.fuzzyMatch(data.message);
-		// if(editor) {
-		// 	const editorID = editor.getEditorID();
-		// 	data.editorID = editorID;
-		// }
-
-		if (!lastMessageGroup || !(lastMessageGroup instanceof MessageGroup) || (lastMessageGroup.getTimestamp() < data.timestamp - this.messageGroupingTimeThreshold) || (lastMessageGroup.getSender().id !== data.uid)) {
+		let groupToAddTo:DisplayableMessage = this.getAppropriateGroup((g) => ((g instanceof MessageGroup) &&
+											 			((data.timestamp >= g.getLatestTimestamp()  - this.messageGroupingTimeThreshold) ||
+														(data.timestamp <= g.getEarliestTimestamp() + this.messageGroupingTimeThreshold)) &&
+														g.getSender().getID() === data.uid), MessageGroup);
+		if(groupToAddTo) {
+			groupToAddTo.addItem(data);
+		} else {
 			// Add to a new group
-			const sender = this.chatUserList.getUser(data.uid);
-			const messageGroup = new MessageGroup(this, sender, data.timestamp, [data]);
-			this.messageGroups.push(messageGroup);
+			groupToAddTo = new MessageGroup(this, this.chatUserList, this.editorStateTracker, [data]);
+			let insertionIndex = this.getInsertionIndex(data.timestamp);
+
+			this.messageGroups.splice(insertionIndex, 0, groupToAddTo);
 
 			(this as any).emit('group-added', {
-				messageGroup: messageGroup
+				messageGroup: groupToAddTo,
+				insertionIndex: insertionIndex
 			});
-			(messageGroup as any).on('message-will-be-added', (event) => {
+			(groupToAddTo as any).on('message-will-be-added', (event) => {
 				(this as any).emit('message-will-be-added', event);
 			});
-			(messageGroup as any).on('message-added', (event) => {
+			(groupToAddTo as any).on('message-added', (event) => {
 				(this as any).emit('message-added', event);
 			});
-		} else {
-			// Add to the latest group
-			groupToAddTo.addMessage(data);
 		}
 	}
 	public getMessageGroups() { return this.messageGroups; }
 	public addDelta(delta:UndoableDelta) {
-		let lastMessageGroup = _.last(this.messageGroups);
-		let groupToAddTo = lastMessageGroup;
+		let groupToAddTo:DisplayableMessage = this.getAppropriateGroup((g) => ((g instanceof EditGroup) &&
+															((delta.getTimestamp() >= g.getLatestTimestamp()  - this.messageGroupingTimeThreshold) ||
+															(delta.getTimestamp() <= g.getEarliestTimestamp() + this.messageGroupingTimeThreshold))), EditGroup);
 
-		if (!lastMessageGroup || !(lastMessageGroup instanceof EditGroup) || (lastMessageGroup.getTimestamp() < delta.getTimestamp()- this.messageGroupingTimeThreshold)) {
-			const editGroup = new EditGroup(this, [delta]);
-			this.messageGroups.push(editGroup);
+		if(groupToAddTo) {
+			groupToAddTo.addItem(delta);
 		} else {
-			groupToAddTo.addDelta(delta);
+			groupToAddTo = new EditGroup(this, [delta]);
+			let insertionIndex = this.getInsertionIndex(delta.getTimestamp());
+			this.messageGroups.splice(insertionIndex, 0, groupToAddTo);
+
+			(this as any).emit('group-added', {
+				messageGroup: groupToAddTo,
+				insertionIndex: insertionIndex
+			});
+			(groupToAddTo as any).on('delta-will-be-added', (event) => {
+				(this as any).emit('delta-will-be-added', event);
+			});
+			(groupToAddTo as any).on('delta-added', (event) => {
+				(this as any).emit('delta-added', event);
+			});
 		}
 	}
 

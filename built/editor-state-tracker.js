@@ -70,8 +70,10 @@ class TitleDelta {
     /**
      * Represents a change where the title of the editor window has changed
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.oldTitle = serializedState.oldTitle;
         this.newTitle = serializedState.newTitle;
         this.timestamp = serializedState.timestamp;
@@ -87,13 +89,19 @@ class TitleDelta {
     serialize() {
         return this.serializedState;
     }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 class GrammarDelta {
     /**
      * Represents a change where the grammar (think of syntax highlighting rules) has changed
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.oldGrammarName = serializedState.oldGrammarName;
         this.newGrammarName = serializedState.newGrammarName;
         this.timestamp = serializedState.timestamp;
@@ -109,13 +117,19 @@ class GrammarDelta {
         editorWrapper.setGrammar(this.oldGrammarName);
     }
     serialize() { return this.serializedState; }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 class EditChange {
     /**
      * Represents a change where text has been edited
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.oldRange = serializedState.oldRange;
         this.newRange = serializedState.newRange;
         this.oldText = serializedState.oldText;
@@ -138,6 +152,10 @@ class EditChange {
         // console.log("UNDO", JSON.stringify(this.newRange), '"'+this.oldText+'"');
     }
     serialize() { return this.serializedState; }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 exports.EditChange = EditChange;
 class EditDelta {
@@ -145,11 +163,13 @@ class EditDelta {
      * Represents a change made to the text of a document. Contains a series of EditChange
      * objects representing the individual changes
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.timestamp = serializedState.timestamp;
         this.changes = serializedState.changes.map((ss) => {
-            return new EditChange(ss);
+            return new EditChange(ss, this.author, this.editorState);
         });
     }
     getTimestamp() { return this.timestamp; }
@@ -165,13 +185,19 @@ class EditDelta {
         });
     }
     serialize() { return this.serializedState; }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 class OpenDelta {
     /**
      * Represents a new text editor being opened
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.grammarName = serializedState.grammarName;
         this.title = serializedState.title;
         this.timestamp = serializedState.timestamp;
@@ -193,13 +219,19 @@ class OpenDelta {
         editorWrapper.setText('');
     }
     serialize() { return this.serializedState; }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 class DestroyDelta {
     /**
      * Represents a text editor being closed.
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.timestamp = serializedState.timestamp;
     }
     getTimestamp() { return this.timestamp; }
@@ -211,14 +243,20 @@ class DestroyDelta {
         editorState.isOpen = true;
     }
     serialize() { return this.serializedState; }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 class ModifiedDelta {
     /**
      * Represents a change to the *modified* flag (which marks if a file has been changed
      * without having been saved)
      */
-    constructor(serializedState) {
+    constructor(serializedState, author, editorState) {
         this.serializedState = serializedState;
+        this.author = author;
+        this.editorState = editorState;
         this.timestamp = serializedState.timestamp;
         this.modified = serializedState.modified;
         this.oldModified = serializedState.oldModified;
@@ -232,10 +270,15 @@ class ModifiedDelta {
         editorState.modified = this.oldModified;
     }
     serialize() { return this.serializedState; }
+    getAuthor() { return this.author; }
+    ;
+    getEditorState() { return this.editorState; }
+    ;
 }
 class EditorState {
-    constructor(suppliedState, editorWrapper, mustPerformChange) {
+    constructor(suppliedState, editorWrapper, userList, mustPerformChange) {
         this.editorWrapper = editorWrapper;
+        this.userList = userList;
         this.deltas = [];
         this.selections = {};
         this.remoteCursors = new RemoteCursorMarker(this);
@@ -253,11 +296,12 @@ class EditorState {
             });
         }
         state.cursors.forEach((c) => {
+            console.log(c);
         });
     }
     serialize() {
         return {
-            deltas: _.map(this.deltas, d => d.serialize()),
+            deltas: _.map(this.getDeltas(), d => d.serialize()),
             isOpen: this.isOpen,
             id: this.editorID,
             title: this.title,
@@ -265,6 +309,8 @@ class EditorState {
             remoteCursors: this.remoteCursors.serialize()
         };
     }
+    ;
+    getDeltas() { return this.deltas; }
     ;
     setTitle(newTitle) { this.title = newTitle; }
     ;
@@ -336,24 +382,25 @@ class EditorState {
     }
     addDelta(serializedDelta, mustPerformChange) {
         const { type } = serializedDelta;
+        const author = this.userList.getUser(serializedDelta.uid);
         let delta;
         if (type === 'open') {
-            delta = new OpenDelta(serializedDelta);
+            delta = new OpenDelta(serializedDelta, author, this);
         }
         else if (type === 'edit') {
-            delta = new EditDelta(serializedDelta);
+            delta = new EditDelta(serializedDelta, author, this);
         }
         else if (type === 'modified') {
-            delta = new ModifiedDelta(serializedDelta);
+            delta = new ModifiedDelta(serializedDelta, author, this);
         }
         else if (type === 'grammar') {
-            delta = new GrammarDelta(serializedDelta);
+            delta = new GrammarDelta(serializedDelta, author, this);
         }
         else if (type === 'title') {
-            delta = new TitleDelta(serializedDelta);
+            delta = new TitleDelta(serializedDelta, author, this);
         }
         else if (type === 'destroy') {
-            delta = new DestroyDelta(serializedDelta);
+            delta = new DestroyDelta(serializedDelta, author, this);
         }
         else {
             delta = null;
@@ -382,9 +429,10 @@ class EditorState {
 }
 exports.EditorState = EditorState;
 class EditorStateTracker {
-    constructor(EditorWrapperClass, channelCommunicationService) {
+    constructor(EditorWrapperClass, channelCommunicationService, userList) {
         this.EditorWrapperClass = EditorWrapperClass;
         this.channelCommunicationService = channelCommunicationService;
+        this.userList = userList;
         this.editorStates = {};
     }
     getAllEditors() {
@@ -413,7 +461,7 @@ class EditorStateTracker {
     onEditorOpened(state, mustPerformChange) {
         let editorState = this.getEditorState(state.id);
         if (!editorState) {
-            editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), mustPerformChange);
+            editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
             this.editorStates[state.id] = editorState;
         }
         return editorState;
