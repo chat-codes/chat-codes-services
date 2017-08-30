@@ -1,6 +1,6 @@
 import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
-import { EditorStateTracker, UndoableDelta, EditChange, EditorState } from './editor-state-tracker';
+import { EditorStateTracker, UndoableDelta, EditDelta, EditorState } from './editor-state-tracker';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
 
@@ -159,8 +159,8 @@ export class MessageGroup extends EventEmitter implements DisplayableMessage {
 	public getSender():ChatUser { return this.sender; }
 	public getMessages():Array<Message> { return this.messages; }
 	public getTimestamp():number { return this.getLatestTimestamp(); };
-	public getEarliestTimestamp():number { return _.first(this.messages).timestamp; }
-	public getLatestTimestamp():number { return _.last(this.messages).timestamp; }
+	public getEarliestTimestamp():number { return _.first(this.messages).getTimestamp(); }
+	public getLatestTimestamp():number { return _.last(this.messages).getTimestamp(); }
 
 	private getInsertionIndex(timestamp:number):number {
 		const messages:Array<Message> = this.getMessages();
@@ -246,6 +246,9 @@ export class MessageGroups extends EventEmitter {
 	}
 	public getMessageGroups() { return this.messageGroups; }
 	public addDelta(delta:UndoableDelta) {
+		if(!(delta instanceof EditDelta)) {
+			return;
+		}
 		let groupToAddTo:DisplayableMessage = this.getAppropriateGroup((g) => ((g instanceof EditGroup) &&
 															((delta.getTimestamp() >= g.getLatestTimestamp()  - this.messageGroupingTimeThreshold) ||
 															(delta.getTimestamp() <= g.getEarliestTimestamp() + this.messageGroupingTimeThreshold))), EditGroup);

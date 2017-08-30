@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
+const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
 const showdown = require("showdown");
 class EditGroup extends events_1.EventEmitter {
@@ -159,8 +160,8 @@ class MessageGroup extends events_1.EventEmitter {
     getMessages() { return this.messages; }
     getTimestamp() { return this.getLatestTimestamp(); }
     ;
-    getEarliestTimestamp() { return _.first(this.messages).timestamp; }
-    getLatestTimestamp() { return _.last(this.messages).timestamp; }
+    getEarliestTimestamp() { return _.first(this.messages).getTimestamp(); }
+    getLatestTimestamp() { return _.last(this.messages).getTimestamp(); }
     getInsertionIndex(timestamp) {
         const messages = this.getMessages();
         for (let i = messages.length - 1; i >= 0; i--) {
@@ -245,6 +246,9 @@ class MessageGroups extends events_1.EventEmitter {
     }
     getMessageGroups() { return this.messageGroups; }
     addDelta(delta) {
+        if (!(delta instanceof editor_state_tracker_1.EditDelta)) {
+            return;
+        }
         let groupToAddTo = this.getAppropriateGroup((g) => ((g instanceof EditGroup) &&
             ((delta.getTimestamp() >= g.getLatestTimestamp() - this.messageGroupingTimeThreshold) ||
                 (delta.getTimestamp() <= g.getEarliestTimestamp() + this.messageGroupingTimeThreshold))), EditGroup);

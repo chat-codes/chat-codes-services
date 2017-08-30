@@ -54,7 +54,7 @@ export class ChatUserList extends EventEmitter {
     }
     public addAll(memberInfo):void {
         const myID = memberInfo.myID;
-        _.each(memberInfo.members, (memberInfo, id) => {
+        _.each(memberInfo.members, (memberInfo:any, id:string) => {
             this.add(id===myID, id, memberInfo.name);
         });
     }

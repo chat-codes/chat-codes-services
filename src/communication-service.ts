@@ -39,7 +39,7 @@ function generateChannelName(commLayer):Promise<string> {
         }).then(function(words:string) {
             // Put the list of opened words in a random order
             return _.shuffle(words.split(/\n/));
-        }).then(function(wordList) {
+        }).then(function(wordList:Array<string>) {
             function* getNextWord():Iterable<string> {
                 for(var i = 0; i<wordList.length; i++) {
                     yield wordList[i];
@@ -115,7 +115,7 @@ export class ChannelCommunicationService extends EventEmitter {
                 });
                 (this as any).emit('editor-state', data);
 
-                _.each(messageHistory, (m) => {
+                _.each(messageHistory, (m:any) => {
                     this.messageGroups.addMessage(m);
                     (this as any).emit('message', _.extend({
                         sender: this.userList.getUser(m.uid)
@@ -200,7 +200,7 @@ export class ChannelCommunicationService extends EventEmitter {
         });
 
         // Add every current member to the user list
-        this.commLayer.getMembers(this.channelName).then((memberInfo) => {
+        this.commLayer.getMembers(this.channelName).then((memberInfo:any) => {
             this.myID = memberInfo.myID;
             this.userList.addAll(memberInfo);
         });

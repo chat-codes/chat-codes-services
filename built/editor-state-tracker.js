@@ -94,6 +94,7 @@ class TitleDelta {
     getEditorState() { return this.editorState; }
     ;
 }
+exports.TitleDelta = TitleDelta;
 class GrammarDelta {
     /**
      * Represents a change where the grammar (think of syntax highlighting rules) has changed
@@ -122,6 +123,7 @@ class GrammarDelta {
     getEditorState() { return this.editorState; }
     ;
 }
+exports.GrammarDelta = GrammarDelta;
 class EditChange {
     /**
      * Represents a change where text has been edited
@@ -190,6 +192,7 @@ class EditDelta {
     getEditorState() { return this.editorState; }
     ;
 }
+exports.EditDelta = EditDelta;
 class OpenDelta {
     /**
      * Represents a new text editor being opened
@@ -224,6 +227,7 @@ class OpenDelta {
     getEditorState() { return this.editorState; }
     ;
 }
+exports.OpenDelta = OpenDelta;
 class DestroyDelta {
     /**
      * Represents a text editor being closed.
@@ -248,6 +252,7 @@ class DestroyDelta {
     getEditorState() { return this.editorState; }
     ;
 }
+exports.DestroyDelta = DestroyDelta;
 class ModifiedDelta {
     /**
      * Represents a change to the *modified* flag (which marks if a file has been changed
@@ -275,6 +280,7 @@ class ModifiedDelta {
     getEditorState() { return this.editorState; }
     ;
 }
+exports.ModifiedDelta = ModifiedDelta;
 class EditorState {
     constructor(suppliedState, editorWrapper, userList, mustPerformChange) {
         this.editorWrapper = editorWrapper;
@@ -436,7 +442,7 @@ class EditorStateTracker {
         this.editorStates = {};
     }
     getAllEditors() {
-        return _.values(this.editorStates);
+        return Object.keys(this.editorStates).map(k => this.editorStates[k]);
     }
     handleEvent(event, mustPerformChange) {
         const editorState = this.getEditorState(event.id);
@@ -467,7 +473,7 @@ class EditorStateTracker {
         return editorState;
     }
     serializeEditorStates() {
-        return _.mapObject(this.editorStates, editorState => editorState.serialize());
+        return _.mapObject(this.editorStates, (editorState) => (editorState.serialize()));
     }
     ;
     removeUserCursors(user) {

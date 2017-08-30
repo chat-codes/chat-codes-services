@@ -269,7 +269,7 @@ export class PusherCommunicationLayer {
 			// In pusher, only subscribe to one event type and then distribute messages individually
 			channel.bind('client-'+this.combinedEventMessageName, (messageArray) => {
 				// Go over all of the messages that have been sent and filter out the ones that have this event type
-				_.each(messageArray, (packagedData) => {
+				_.each(messageArray, (packagedData:any) => {
 					const {s,i,n,m,e} = packagedData;
 					const eventN = e;
 					if(eventN === eventName) {
@@ -308,7 +308,7 @@ export class PusherCommunicationLayer {
 	 * @param  {string}  channelName The name of othe channel
 	 * @return {Promise}             A promise whose value will resolve to a list of members
 	 */
-	public getMembers(channelName:string):any {
+	public getMembers(channelName:string):Promise<Array<any>> {
 		const {presencePromise} = this.getChannel(channelName);
 		return presencePromise.then(function(channel) {
 			return channel.members;

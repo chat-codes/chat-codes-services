@@ -65,7 +65,7 @@ export class RemoteCursorMarker extends EventEmitter {
 		};
 	}
 	public removeUserCursors(user) {
-		_.each(this.cursors, (cursor, id) => {
+		_.each(this.cursors, (cursor:any, id) => {
 			if(cursor.user.id === user.id) {
 				this.removeCursor(id, user);
 			}
@@ -109,7 +109,7 @@ export interface UndoableDelta {
 	serialize();
 }
 
-class TitleDelta implements UndoableDelta {
+export class TitleDelta implements UndoableDelta {
     /**
      * Represents a change where the title of the editor window has changed
      */
@@ -134,7 +134,7 @@ class TitleDelta implements UndoableDelta {
 	public getAuthor():ChatUser { return this.author; };
 	public getEditorState():EditorState { return this.editorState; };
 }
-class GrammarDelta implements UndoableDelta {
+export class GrammarDelta implements UndoableDelta {
 	/**
 	 * Represents a change where the grammar (think of syntax highlighting rules) has changed
 	 */
@@ -199,7 +199,7 @@ export class EditChange implements UndoableDelta {
 	public getEditorState():EditorState { return this.editorState; };
 }
 
-class EditDelta implements UndoableDelta {
+export class EditDelta implements UndoableDelta {
 	/**
 	 * Represents a change made to the text of a document. Contains a series of EditChange
 	 * objects representing the individual changes
@@ -228,7 +228,7 @@ class EditDelta implements UndoableDelta {
 	public getEditorState():EditorState { return this.editorState; };
 }
 
-class OpenDelta implements UndoableDelta {
+export class OpenDelta implements UndoableDelta {
 	/**
 	 * Represents a new text editor being opened
 	 */
@@ -262,7 +262,7 @@ class OpenDelta implements UndoableDelta {
 	public getAuthor():ChatUser { return this.author; };
 	public getEditorState():EditorState { return this.editorState; };
 }
-class DestroyDelta implements UndoableDelta {
+export class DestroyDelta implements UndoableDelta {
 	/**
 	 * Represents a text editor being closed.
 	 */
@@ -281,7 +281,7 @@ class DestroyDelta implements UndoableDelta {
 	public getAuthor():ChatUser { return this.author; };
 	public getEditorState():EditorState { return this.editorState; };
 }
-class ModifiedDelta implements UndoableDelta {
+export class ModifiedDelta implements UndoableDelta {
 	/**
 	 * Represents a change to the *modified* flag (which marks if a file has been changed
 	 * without having been saved)
@@ -457,7 +457,7 @@ export class EditorStateTracker {
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) { }
 
 	public getAllEditors():Array<EditorState> {
-		return _.values(this.editorStates);
+		return Object.keys(this.editorStates).map(k => this.editorStates[k]);
 	}
 
 	public handleEvent(event, mustPerformChange:boolean):UndoableDelta {
@@ -491,11 +491,11 @@ export class EditorStateTracker {
 	}
 
 	public serializeEditorStates() {
-		return _.mapObject(this.editorStates, editorState => editorState.serialize());
+		return _.mapObject(this.editorStates, (editorState:EditorState) => (editorState.serialize()));
 	};
 
 	public removeUserCursors(user):void {
-		_.each(this.editorStates, (es) => {
+		_.each(this.editorStates, (es:EditorState) => {
 			es.removeUserCursors(user);
 		});
 	}

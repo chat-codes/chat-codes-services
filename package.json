@@ -5,9 +5,14 @@
   "main": "built/chat-codes-services.js",
   "dependencies": {
     "@types/node": "^8.0.16",
+    "@types/socket.io": "^1.4.30",
+    "@types/socket.io-client": "^1.4.30",
+    "@types/underscore": "^1.8.2",
     "fuzzyset.js": "0.0.4",
     "pusher-js": "^4.1.0",
     "showdown": "^1.7.3",
+    "socket.io": "^2.0.3",
+    "socket.io-client": "^2.0.3",
     "underscore": "^1.8.3"
   },
   "devDependencies": {}
