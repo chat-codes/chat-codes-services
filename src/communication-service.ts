@@ -2,6 +2,7 @@
 import * as _ from 'underscore';
 import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
+import { SocketIOCommunicationLayer } from './socket-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
 import { UndoableDelta, EditorStateTracker, EditorState } from './editor-state-tracker';
@@ -11,6 +12,8 @@ declare var __dirname:string;
 declare var window;
 
 const DEBUG = false;
+
+const CommunicationLayerClass = PusherCommunicationLayer;
 
 
 /**
@@ -71,7 +74,7 @@ function generateChannelName(commLayer):Promise<string> {
 export class ChannelCommunicationService extends EventEmitter {
     public userList:ChatUserList = new ChatUserList(); // A list of chat userList
     public messageGroups:MessageGroups // A list of message groups
-    public commLayer:PusherCommunicationLayer; // The communication channel
+    public commLayer:CommunicationLayerClass; // The communication channel
     public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
 
@@ -399,12 +402,13 @@ export class ChannelCommunicationService extends EventEmitter {
 /* A class to create and manage ChannelCommunicationService instances */
 export class CommunicationService {
     constructor(public isRoot:boolean, authInfo, private EditorWrapperClass) {
-        this.commLayer = new PusherCommunicationLayer(authInfo);
+        // this.commLayer = new PusherCommunicationLayer(authInfo);
+        this.commLayer = new CommunicationLayerClass(authInfo);
         // {
         //     username: username
         // }, key, cluster);
     }
-    public commLayer:PusherCommunicationLayer; // The underlying communication mechanism
+    public commLayer:CommunicationLayerClass; // The underlying communication mechanism
     private clients:{[channelName:string]:ChannelCommunicationService} = {}; // Maps channel names to channel comms
 
     /**

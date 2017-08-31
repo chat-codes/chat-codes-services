@@ -7,6 +7,7 @@ const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const DEBUG = false;
+const CommunicationLayerClass = pusher_communication_layer_1.PusherCommunicationLayer;
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
  * numbers to the channel name
@@ -360,7 +361,8 @@ class CommunicationService {
         this.isRoot = isRoot;
         this.EditorWrapperClass = EditorWrapperClass;
         this.clients = {}; // Maps channel names to channel comms
-        this.commLayer = new pusher_communication_layer_1.PusherCommunicationLayer(authInfo);
+        // this.commLayer = new PusherCommunicationLayer(authInfo);
+        this.commLayer = new CommunicationLayerClass(authInfo);
         // {
         //     username: username
         // }, key, cluster);

@@ -4,23 +4,37 @@ const sio = require("socket.io");
 class ChatCodesSocketIOServer {
     constructor(port) {
         this.port = port;
+        this.namespaces = {};
+        this.server = new ChatCodesSocketIOServer(8888);
         this.io = sio(this.port);
-        console.log('started server');
-        this.io.on('join-room', (room, uid) => {
-            this.io.join(room);
+        this.io.on('connection', (socket) => {
+            socket.on('request-join-room', (roomName, callback) => {
+                const ns = this.getNamespace(roomName);
+                callback();
+            });
+            socket.on('get-membersin-room', (roomName, callback) => {
+                const ns = this.getNamespace(roomName);
+                ns.clients({});
+                callback(clients);
+                callback();
+            });
+        }, public, getNamespace(name, string), SocketIO.Namespace, {
+            if(_, has = (this.namespaces, name)) {
+                return this.namespaces[name];
+            }, else: {
+                const: ns = this.io.of(`/${name}`),
+                ns: .on('connection', (s) => {
+                    s.on('event', (data) => {
+                        s.broadcast.emit('event', data);
+                    });
+                }),
+                this: .namespaces[name] = ns,
+                return: this.namespaces[name]
+            }
+        }, destroy(), void {
+            this: .io.close()
         });
-        this.io.on('leave-room', (room, uid) => {
-            this.io.leave(room);
-            console.log(uid + ' left ' + room);
-        });
-        this.io.on('send-message', (room, message, event) => {
-            this.io.to(room).emit(event, message);
-        });
-    }
-    destroy() {
-        this.io.disconnect();
     }
 }
 exports.ChatCodesSocketIOServer = ChatCodesSocketIOServer;
-const server = new ChatCodesSocketIOServer(8888);
 //# sourceMappingURL=server.js.map
