@@ -3,11 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const pusher_communication_layer_1 = require("./pusher-communication-layer");
+const socket_communication_layer_1 = require("./socket-communication-layer");
 const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const DEBUG = false;
-const CommunicationLayerClass = pusher_communication_layer_1.PusherCommunicationLayer;
+const USE_PUSHER = true;
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
  * numbers to the channel name
@@ -133,12 +134,13 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
             const { id, type, uid } = data;
             let user = this.userList.getUser(uid);
+            const cursorID = uid + id;
             if (type === 'change-position') {
-                const { newBufferPosition, oldBufferPosition, newRange, id, editorID } = data;
+                const { newBufferPosition, oldBufferPosition, newRange, cursorID, editorID } = data;
                 const editorState = this.editorStateTracker.getEditorState(editorID);
                 if (editorState) {
                     const remoteCursors = editorState.getRemoteCursors();
-                    remoteCursors.updateCursor(id, user, { row: newBufferPosition[0], column: newBufferPosition[1] });
+                    remoteCursors.updateCursor(cursorID, user, { row: newBufferPosition[0], column: newBufferPosition[1] });
                 }
             }
             else if (type === 'change-selection') {
@@ -146,7 +148,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
                 const editorState = this.editorStateTracker.getEditorState(editorID);
                 if (editorState) {
                     const remoteCursors = editorState.getRemoteCursors();
-                    remoteCursors.updateSelection(id, user, newRange);
+                    remoteCursors.updateSelection(cursorID, user, newRange);
                 }
             }
             else if (type === 'destroy') {
@@ -154,7 +156,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
                 const editorState = this.editorStateTracker.getEditorState(editorID);
                 if (editorState) {
                     const remoteCursors = editorState.getRemoteCursors();
-                    remoteCursors.removeCursor(id, user);
+                    remoteCursors.removeCursor(cursorID, user);
                 }
             }
             this.emit('cursor-event', data);
@@ -176,17 +178,10 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commLayer.bind(this.channelName, 'terminal-data', (event) => {
             this.emit('terminal-data', event);
         });
-        // Add every current member to the user list
-        this.commLayer.getMembers(this.channelName).then((memberInfo) => {
-            this.myID = memberInfo.myID;
-            this.userList.addAll(memberInfo);
-        });
-        // Add anyone who subsequently joines
-        this.commLayer.onMemberAdded(this.channelName, (member) => {
-            this.userList.add(false, member.id, member.info.name);
+        // Someone requested the conversation & editor history
+        this.commLayer.bind(this.channelName, 'request-history', (memberID) => {
             // If I'm root, then send over the current editor state and past message history to every new user
             if (this.isRoot()) {
-                const memberID = member.id;
                 this.commLayer.trigger(this.channelName, 'history', {
                     forUser: memberID,
                     editorState: this.editorStateTracker.serializeEditorStates(),
@@ -194,6 +189,17 @@ class ChannelCommunicationService extends events_1.EventEmitter {
                     messageHistory: this.messageGroups.getMessageHistory()
                 });
             }
+        });
+        // Add every current member to the user list
+        this.commLayer.getMembers(this.channelName).then((memberInfo) => {
+            this.myID = memberInfo.myID;
+            this.userList.addAll(memberInfo);
+            this.commLayer.trigger(this.channelName, 'request-history', this.myID);
+        });
+        // Add anyone who subsequently joines
+        this.commLayer.onMemberAdded(this.channelName, (member) => {
+            const memberID = member.id;
+            this.userList.add(false, memberID, member.info.name);
         });
         //When a user leaves, remove them from the user list and remove their cursor
         this.commLayer.onMemberRemoved(this.channelName, (member) => {
@@ -361,11 +367,12 @@ class CommunicationService {
         this.isRoot = isRoot;
         this.EditorWrapperClass = EditorWrapperClass;
         this.clients = {}; // Maps channel names to channel comms
-        // this.commLayer = new PusherCommunicationLayer(authInfo);
-        this.commLayer = new CommunicationLayerClass(authInfo);
-        // {
-        //     username: username
-        // }, key, cluster);
+        if (USE_PUSHER) {
+            this.commLayer = new pusher_communication_layer_1.PusherCommunicationLayer(authInfo);
+        }
+        else {
+            this.commLayer = new socket_communication_layer_1.SocketIOCommunicationLayer(authInfo);
+        }
     }
     /**
      * Create a channel with a randomly generated name

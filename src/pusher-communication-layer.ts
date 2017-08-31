@@ -6,6 +6,7 @@
 import * as Pusher from 'pusher-js';
 import * as _ from 'underscore';
 import {format} from 'url';
+import { CommunicationLayer } from './communication-layer-interface';
 
 
 /**
@@ -76,7 +77,7 @@ function repeat(x:any, times:number):Array<any> {
 /*
  * A class that manages client-to-client communication through the [Pusher](https://pusher.com) service
  */
-export class PusherCommunicationLayer {
+export class PusherCommunicationLayer implements CommunicationLayer {
 	/**
 	 * constructor
 	 * @param  {any} authInfo An object with a key for `username` (containing the user's desired username)

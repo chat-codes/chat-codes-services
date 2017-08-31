@@ -3,6 +3,7 @@ import * as FuzzySet from 'fuzzyset.js';
 import { EventEmitter } from 'events';
 import { ChannelCommunicationService } from './communication-service';
 import { ChatUser, ChatUserList } from './chat-user';
+import * as CodeMirror from 'codemirror';
 
 interface SerializedRange {
 	start: Array<number>,
@@ -77,9 +78,10 @@ export class RemoteCursorMarker extends EventEmitter {
  * EditorWrapper is an interface for interacting with a given editor.
  */
 interface EditorWrapper {
+	setText(value:string);
+	replaceText(range, value:string);
 	setEditorState(editorState:EditorState);
 	setGrammar(grammarName:string);
-	replaceText(range, value:string);
 	getAnchor(range);
 	getCurrentAnchorPosition(anchor);
 	setText(value:string);
@@ -101,8 +103,8 @@ interface EditorWrapper {
  * A change to an editor or environment that can be done and undone
  */
 export interface UndoableDelta {
-    doAction(editorState:EditorState):void;
-	undoAction(editorState:EditorState):void;
+    doAction(editorWrapper:EditorWrapper):void;
+	undoAction(editorWrapper:EditorWrapper):void;
 	getTimestamp():number;
 	getAuthor():ChatUser;
 	getEditorState():EditorState;
@@ -122,11 +124,11 @@ export class TitleDelta implements UndoableDelta {
 	private oldTitle:string;
 	private timestamp:number;
 	public getTimestamp():number { return this.timestamp; };
-    public doAction(editorState:EditorState) {
-        editorState.setTitle(this.newTitle);
+    public doAction(editorWrapper:EditorWrapper) {
+        this.editorState.setTitle(this.newTitle);
     }
-	public undoAction(editorState:EditorState) {
-        editorState.setTitle(this.oldTitle);
+	public undoAction(editorWrapper:EditorWrapper) {
+        this.editorState.setTitle(this.oldTitle);
     }
 	public serialize() {
 		return this.serializedState;
@@ -147,12 +149,10 @@ export class GrammarDelta implements UndoableDelta {
 	public getTimestamp():number { return this.timestamp; };
 	private oldGrammarName:string;
 	private newGrammarName:string;
-    public doAction(editorState:EditorState) {
-		const editorWrapper = editorState.getEditorWrapper();
+    public doAction(editorWrapper:EditorWrapper) {
 		editorWrapper.setGrammar(this.newGrammarName);
     }
-	public undoAction(editorState:EditorState) {
-		const editorWrapper = editorState.getEditorWrapper();
+	public undoAction(editorWrapper:EditorWrapper) {
 		editorWrapper.setGrammar(this.oldGrammarName);
     }
 	public serialize() { return this.serializedState; }
@@ -178,25 +178,21 @@ export class EditChange implements UndoableDelta {
 		this.oldText = serializedState.oldText;
 		this.newText = serializedState.newText;
 	}
-    public doAction(editorState:EditorState) {
-		const editorWrapper = editorState.getEditorWrapper();
-
+    public doAction(editorWrapper:EditorWrapper) {
 		const {oldText, newRange} = editorWrapper.replaceText(this.oldRange, this.newText);
 		this.newRange = newRange;
 		this.oldText = oldText;
-		// console.log("DO", JSON.stringify(this.oldRange), '"'+this.newText+'"');
     }
-	public undoAction(editorState:EditorState) {
-		const editorWrapper = editorState.getEditorWrapper();
-
+	public undoAction(editorWrapper:EditorWrapper) {
 		const {oldText, newRange} = editorWrapper.replaceText(this.newRange, this.oldText);
 		this.oldRange = newRange;
 		this.newText = oldText;
-		// console.log("UNDO", JSON.stringify(this.newRange), '"'+this.oldText+'"');
     }
 	public serialize() { return this.serializedState; }
 	public getAuthor():ChatUser { return this.author; };
 	public getEditorState():EditorState { return this.editorState; };
+	public getOldRange() { return this.oldRange; }
+	public getNewText():string { return this.newText; }
 }
 
 export class EditDelta implements UndoableDelta {
@@ -213,19 +209,20 @@ export class EditDelta implements UndoableDelta {
 	private changes:Array<EditChange>;
 	private timestamp:number;
 	public getTimestamp():number { return this.timestamp; };
-    public doAction(editorState:EditorState) {
+    public doAction(editorWrapper:EditorWrapper) {
 		this.changes.forEach( (c) => {
-			c.doAction(editorState);
+			c.doAction(editorWrapper);
 		});
     }
-    public undoAction(editorState:EditorState) {
+    public undoAction(editorWrapper:EditorWrapper) {
 		this.changes.forEach( (c) => {
-			c.undoAction(editorState);
+			c.undoAction(editorWrapper);
 		});
     }
 	public serialize() { return this.serializedState; }
 	public getAuthor():ChatUser { return this.author; };
 	public getEditorState():EditorState { return this.editorState; };
+	public getChanges():Array<EditChange> { return this.changes; };
 }
 
 export class OpenDelta implements UndoableDelta {
@@ -243,21 +240,20 @@ export class OpenDelta implements UndoableDelta {
 	private title:string;
 	private contents:string;
 	public getTimestamp():number { return this.timestamp; };
-	doAction(editorState) {
-		const editorWrapper = editorState.getEditorWrapper();
-		editorState.title = this.title;
-		editorState.isOpen = true;
+	public doAction(editorWrapper:EditorWrapper) {
+		this.editorState.setTitle(this.title);
+		this.editorState.setIsOpen(true);
 
 		editorWrapper.setGrammar(this.grammarName);
 		editorWrapper.setText(this.contents);
 	}
-	undoAction(editorState) {
-		const editorWrapper = editorState.getEditorWrapper();
-		editorState.title = '';
-		editorState.isOpen = false;
+	public undoAction(editorWrapper:EditorWrapper) {
+		this.editorState.setTitle('');
+		this.editorState.setIsOpen(false);
 
 		editorWrapper.setText('');
 	}
+	public getContents():string { return this.contents; };
 	public serialize() { return this.serializedState; }
 	public getAuthor():ChatUser { return this.author; };
 	public getEditorState():EditorState { return this.editorState; };
@@ -271,11 +267,11 @@ export class DestroyDelta implements UndoableDelta {
 	}
 	private timestamp:number;
 	public getTimestamp():number { return this.timestamp; };
-	doAction(editorState) {
-		editorState.isOpen = false;
+	public doAction(editorWrapper:EditorWrapper) {
+		this.editorState.setIsOpen(false);
 	}
-	undoAction(editorState) {
-		editorState.isOpen = true;
+	public undoAction(editorWrapper:EditorWrapper) {
+		this.editorState.setIsOpen(true);
 	}
 	public serialize() { return this.serializedState; }
 	public getAuthor():ChatUser { return this.author; };
@@ -295,11 +291,11 @@ export class ModifiedDelta implements UndoableDelta {
 	private modified:boolean;
 	private oldModified:boolean;
 	public getTimestamp():number { return this.timestamp; };
-	doAction(editorState) {
-		editorState.modified = this.modified;
+	public doAction(editorWrapper:EditorWrapper) {
+		this.editorState.setIsModified(this.modified);
 	}
-	undoAction(editorState) {
-		editorState.modified = this.oldModified;
+	public undoAction(editorWrapper:EditorWrapper) {
+		this.editorState.setIsModified(this.oldModified);
 	}
 	public serialize() { return this.serializedState; }
 	public getAuthor():ChatUser { return this.author; };
@@ -347,6 +343,7 @@ export class EditorState {
 	public getDeltas():Array<UndoableDelta> { return this.deltas; };
 	public setTitle(newTitle:string):void { this.title = newTitle; };
 	public setIsOpen(val:boolean):void { this.isOpen = val; };
+	public setIsModified(val:boolean):void { this.modified = val; };
 	public getEditorWrapper():EditorWrapper { return this.editorWrapper; };
 	public getTitle():string { return this.title; };
 	public getIsOpen():boolean { return this.isOpen; };
@@ -367,17 +364,18 @@ export class EditorState {
 	}
 	private moveDeltaPointer(index:number) {
 		let d:UndoableDelta;
+		const editorWrapper = this.getEditorWrapper();
 
 		if(this.deltaPointer < index) {
 			while(this.deltaPointer < index) {
 				this.deltaPointer++;
 				d = this.deltas[this.deltaPointer];
-				d.doAction(this);
+				d.doAction(editorWrapper);
 			}
 		} else if(this.deltaPointer > index) {
 			while(this.deltaPointer > index) {
 				d = this.deltas[this.deltaPointer];
-				d.undoAction(this);
+				d.undoAction(editorWrapper);
 				this.deltaPointer--;
 			}
 		}
@@ -404,6 +402,58 @@ export class EditorState {
 			editorWrapper.setReadOnly(false, extraInfo);
 			this.moveDeltaPointer(this.deltas.length-1);
 		}
+	}
+
+	public getTextBeforeDelta(delta:UndoableDelta) {
+		return this.getTextAfterIndex(this.getDeltaIndex(delta)-1);
+	}
+	public getTextAfterDelta(delta:UndoableDelta) {
+		return this.getTextAfterIndex(this.getDeltaIndex(delta));
+	};
+
+	private getDeltaIndex(delta:UndoableDelta):number {
+		return this.deltas.indexOf(delta);
+	}
+
+	private getTextAfterIndex(index:number):string {
+		const cmInterface = {
+			editor: CodeMirror(null),
+			setText: function(value:string) {
+				this.editor.setValue(value);
+			},
+			replaceText: function(range, value:string) {
+				this.editor.replaceRange(value, {
+					line: range.start[0],
+					ch: range.start[1]
+				}, {
+					line: range.end[0],
+					ch: range.end[1]
+				});
+			},
+			getValue: function() {
+				return this.editor.getValue();
+			},
+			destroy: function() {
+				this.editor.clearHistory();
+			}
+		};
+		for(let i = 0; i<=index; i++) {
+			const delta = this.deltas[i];
+			if(delta instanceof OpenDelta) {
+				const oDelta:OpenDelta = delta as OpenDelta;
+				cmInterface.setText(oDelta.getContents());
+			} else if(delta instanceof EditDelta) {
+				const eDelta:EditDelta = delta as EditDelta;
+				eDelta.getChanges().forEach( (c:EditChange) => {
+					cmInterface.replaceText(c.getOldRange(), c.getNewText())
+				});
+			} else {
+				continue;
+			}
+		}
+		const value = cmInterface.getValue();
+		cmInterface.destroy();
+		return value;
 	}
 
 	public addDelta(serializedDelta, mustPerformChange:boolean):UndoableDelta {

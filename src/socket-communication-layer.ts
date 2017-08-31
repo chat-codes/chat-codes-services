@@ -1,7 +1,8 @@
 import {Manager, Socket} from 'socket.io-client';
+import { CommunicationLayer } from './communication-layer-interface';
 import * as _ from 'underscore';
 
-export class SocketIOCommunicationLayer {
+export class SocketIOCommunicationLayer implements CommunicationLayer {
 	private manager:Promise<SocketIOClient.Manager>;
 	private mainSocket:Promise<SocketIOClient.Socket>;
 	private namespaces:{[name:string]:Promise<SocketIOClient.Socket>} = {};

@@ -4,10 +4,12 @@
   "description": "",
   "main": "built/chat-codes-services.js",
   "dependencies": {
+    "@types/codemirror": "0.0.46",
     "@types/node": "^8.0.16",
     "@types/socket.io": "^1.4.30",
     "@types/socket.io-client": "^1.4.30",
     "@types/underscore": "^1.8.2",
+    "codemirror": "^5.29.0",
     "fuzzyset.js": "0.0.4",
     "pusher-js": "^4.1.0",
     "showdown": "^1.7.3",

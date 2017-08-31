@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
+const CodeMirror = require("codemirror");
 ;
 /*
  * Tracks a set of remote cursors.
@@ -80,11 +81,11 @@ class TitleDelta {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
-        editorState.setTitle(this.newTitle);
+    doAction(editorWrapper) {
+        this.editorState.setTitle(this.newTitle);
     }
-    undoAction(editorState) {
-        editorState.setTitle(this.oldTitle);
+    undoAction(editorWrapper) {
+        this.editorState.setTitle(this.oldTitle);
     }
     serialize() {
         return this.serializedState;
@@ -109,12 +110,10 @@ class GrammarDelta {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
-        const editorWrapper = editorState.getEditorWrapper();
+    doAction(editorWrapper) {
         editorWrapper.setGrammar(this.newGrammarName);
     }
-    undoAction(editorState) {
-        const editorWrapper = editorState.getEditorWrapper();
+    undoAction(editorWrapper) {
         editorWrapper.setGrammar(this.oldGrammarName);
     }
     serialize() { return this.serializedState; }
@@ -139,25 +138,23 @@ class EditChange {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
-        const editorWrapper = editorState.getEditorWrapper();
+    doAction(editorWrapper) {
         const { oldText, newRange } = editorWrapper.replaceText(this.oldRange, this.newText);
         this.newRange = newRange;
         this.oldText = oldText;
-        // console.log("DO", JSON.stringify(this.oldRange), '"'+this.newText+'"');
     }
-    undoAction(editorState) {
-        const editorWrapper = editorState.getEditorWrapper();
+    undoAction(editorWrapper) {
         const { oldText, newRange } = editorWrapper.replaceText(this.newRange, this.oldText);
         this.oldRange = newRange;
         this.newText = oldText;
-        // console.log("UNDO", JSON.stringify(this.newRange), '"'+this.oldText+'"');
     }
     serialize() { return this.serializedState; }
     getAuthor() { return this.author; }
     ;
     getEditorState() { return this.editorState; }
     ;
+    getOldRange() { return this.oldRange; }
+    getNewText() { return this.newText; }
 }
 exports.EditChange = EditChange;
 class EditDelta {
@@ -176,20 +173,22 @@ class EditDelta {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
+    doAction(editorWrapper) {
         this.changes.forEach((c) => {
-            c.doAction(editorState);
+            c.doAction(editorWrapper);
         });
     }
-    undoAction(editorState) {
+    undoAction(editorWrapper) {
         this.changes.forEach((c) => {
-            c.undoAction(editorState);
+            c.undoAction(editorWrapper);
         });
     }
     serialize() { return this.serializedState; }
     getAuthor() { return this.author; }
     ;
     getEditorState() { return this.editorState; }
+    ;
+    getChanges() { return this.changes; }
     ;
 }
 exports.EditDelta = EditDelta;
@@ -208,19 +207,19 @@ class OpenDelta {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
-        const editorWrapper = editorState.getEditorWrapper();
-        editorState.title = this.title;
-        editorState.isOpen = true;
+    doAction(editorWrapper) {
+        this.editorState.setTitle(this.title);
+        this.editorState.setIsOpen(true);
         editorWrapper.setGrammar(this.grammarName);
         editorWrapper.setText(this.contents);
     }
-    undoAction(editorState) {
-        const editorWrapper = editorState.getEditorWrapper();
-        editorState.title = '';
-        editorState.isOpen = false;
+    undoAction(editorWrapper) {
+        this.editorState.setTitle('');
+        this.editorState.setIsOpen(false);
         editorWrapper.setText('');
     }
+    getContents() { return this.contents; }
+    ;
     serialize() { return this.serializedState; }
     getAuthor() { return this.author; }
     ;
@@ -240,11 +239,11 @@ class DestroyDelta {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
-        editorState.isOpen = false;
+    doAction(editorWrapper) {
+        this.editorState.setIsOpen(false);
     }
-    undoAction(editorState) {
-        editorState.isOpen = true;
+    undoAction(editorWrapper) {
+        this.editorState.setIsOpen(true);
     }
     serialize() { return this.serializedState; }
     getAuthor() { return this.author; }
@@ -268,11 +267,11 @@ class ModifiedDelta {
     }
     getTimestamp() { return this.timestamp; }
     ;
-    doAction(editorState) {
-        editorState.modified = this.modified;
+    doAction(editorWrapper) {
+        this.editorState.setIsModified(this.modified);
     }
-    undoAction(editorState) {
-        editorState.modified = this.oldModified;
+    undoAction(editorWrapper) {
+        this.editorState.setIsModified(this.oldModified);
     }
     serialize() { return this.serializedState; }
     getAuthor() { return this.author; }
@@ -322,6 +321,8 @@ class EditorState {
     ;
     setIsOpen(val) { this.isOpen = val; }
     ;
+    setIsModified(val) { this.modified = val; }
+    ;
     getEditorWrapper() { return this.editorWrapper; }
     ;
     getTitle() { return this.title; }
@@ -348,17 +349,18 @@ class EditorState {
     }
     moveDeltaPointer(index) {
         let d;
+        const editorWrapper = this.getEditorWrapper();
         if (this.deltaPointer < index) {
             while (this.deltaPointer < index) {
                 this.deltaPointer++;
                 d = this.deltas[this.deltaPointer];
-                d.doAction(this);
+                d.doAction(editorWrapper);
             }
         }
         else if (this.deltaPointer > index) {
             while (this.deltaPointer > index) {
                 d = this.deltas[this.deltaPointer];
-                d.undoAction(this);
+                d.undoAction(editorWrapper);
                 this.deltaPointer--;
             }
         }
@@ -385,6 +387,58 @@ class EditorState {
             editorWrapper.setReadOnly(false, extraInfo);
             this.moveDeltaPointer(this.deltas.length - 1);
         }
+    }
+    getTextBeforeDelta(delta) {
+        return this.getTextAfterIndex(this.getDeltaIndex(delta) - 1);
+    }
+    getTextAfterDelta(delta) {
+        return this.getTextAfterIndex(this.getDeltaIndex(delta));
+    }
+    ;
+    getDeltaIndex(delta) {
+        return this.deltas.indexOf(delta);
+    }
+    getTextAfterIndex(index) {
+        const cmInterface = {
+            editor: CodeMirror(null),
+            setText: function (value) {
+                this.editor.setValue(value);
+            },
+            replaceText: function (range, value) {
+                this.editor.replaceRange(value, {
+                    line: range.start[0],
+                    ch: range.start[1]
+                }, {
+                    line: range.end[0],
+                    ch: range.end[1]
+                });
+            },
+            getValue: function () {
+                return this.editor.getValue();
+            },
+            destroy: function () {
+                this.editor.clearHistory();
+            }
+        };
+        for (let i = 0; i <= index; i++) {
+            const delta = this.deltas[i];
+            if (delta instanceof OpenDelta) {
+                const oDelta = delta;
+                cmInterface.setText(oDelta.getContents());
+            }
+            else if (delta instanceof EditDelta) {
+                const eDelta = delta;
+                eDelta.getChanges().forEach((c) => {
+                    cmInterface.replaceText(c.getOldRange(), c.getNewText());
+                });
+            }
+            else {
+                continue;
+            }
+        }
+        const value = cmInterface.getValue();
+        cmInterface.destroy();
+        return value;
     }
     addDelta(serializedDelta, mustPerformChange) {
         const { type } = serializedDelta;

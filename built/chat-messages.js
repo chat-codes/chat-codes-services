@@ -28,6 +28,42 @@ class EditGroup extends events_1.EventEmitter {
         });
         return insertionIndex;
     }
+    getTextBefore() {
+        const editorStates = [];
+        const rv = [];
+        this.getDeltas().forEach((d) => {
+            const editorState = d.getEditorState();
+            if (_.indexOf(editorStates, editorState) < 0) {
+                editorStates.push(editorState);
+                rv.push({
+                    editorState: editorState,
+                    value: editorState.getTextBeforeDelta(d)
+                });
+            }
+        });
+        return rv;
+    }
+    getTextAfter() {
+        const editorStates = [];
+        const rv = [];
+        this.getDeltas().forEach((d) => {
+            const editorState = d.getEditorState();
+            if (_.indexOf(editorStates, editorState) < 0) {
+                editorStates.push(editorState);
+                rv.push({
+                    editorState: editorState,
+                    value: editorState.getTextBeforeDelta(d)
+                });
+            }
+        });
+        return rv;
+    }
+    // public getTextBeforeDelta(delta:UndoableDelta) {
+    // 	return this.getTextAfterIndex(this.getDeltaIndex(delta)-1);
+    // }
+    // public getTextAfterDelta(delta:UndoableDelta) {
+    // 	return this.getTextAfterIndex(this.getDeltaIndex(delta));
+    // };
     getEditorStates() {
         const editorStates = this.getDeltas().map(delta => delta.getEditorState());
         return _.unique(editorStates);
