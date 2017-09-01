@@ -1,8 +1,10 @@
+//<reference path="./typings/node/node.d.ts" />
 import * as _ from 'underscore';
 import * as FuzzySet from 'fuzzyset.js';
 import { EventEmitter } from 'events';
 import { ChannelCommunicationService } from './communication-service';
 import { ChatUser, ChatUserList } from './chat-user';
+import { Timestamped } from './chat-messages';
 import * as CodeMirror from 'codemirror';
 
 interface SerializedRange {
@@ -13,6 +15,9 @@ interface SerializedPos {
 	row: number,
 	column: number
 }
+
+const CURRENT:number=-1;
+
 /*
  * Tracks a set of remote cursors.
  */
@@ -102,10 +107,10 @@ interface EditorWrapper {
 /**
  * A change to an editor or environment that can be done and undone
  */
-export interface UndoableDelta {
+export interface UndoableDelta extends Timestamped  {
     doAction(editorWrapper:EditorWrapper):void;
 	undoAction(editorWrapper:EditorWrapper):void;
-	getTimestamp():number;
+	// getTimestamp():number; //follows from extending Timestamped
 	getAuthor():ChatUser;
 	getEditorState():EditorState;
 	serialize();
@@ -312,6 +317,7 @@ export class EditorState {
 	private title:string;
 	private modified:boolean;
 	private deltaPointer:number=-1;
+	private currentTimestamp:number=CURRENT;
     constructor(suppliedState, private editorWrapper, private userList:ChatUserList, mustPerformChange:boolean) {
         let state = _.extend({
             isOpen: true,
@@ -326,9 +332,7 @@ export class EditorState {
 				this.addDelta(d, true);
 			});
 		}
-		state.cursors.forEach((c) => {
-			console.log(c);
-		});
+		state.cursors.forEach((c) => { });
 	}
 	public serialize() {
 		return {
@@ -350,16 +354,13 @@ export class EditorState {
 	public getRemoteCursors():RemoteCursorMarker { return this.remoteCursors; };
 	public getEditorID():number { return this.editorID; };
 	public getIsModified():boolean { return this.modified; };
-	public addHighlight(range, timestamp:number=null, extraInfo):number {
-		this.revertToTimestamp(timestamp, extraInfo);
+	public addHighlight(range, extraInfo):number {
 		return this.getEditorWrapper().addHighlight(range, extraInfo);
 	}
 	public removeHighlight(highlightID:number, extraInfo):boolean {
-		this.revertToTimestamp(null, extraInfo);
 		return this.getEditorWrapper().removeHighlight(highlightID, extraInfo);
 	}
-	public focus(range, timestamp:number=null, extraInfo):boolean {
-		this.revertToTimestamp(timestamp, extraInfo);
+	public focus(range, extraInfo):boolean {
 		return this.getEditorWrapper().focus(range, extraInfo);
 	}
 	private moveDeltaPointer(index:number) {
@@ -404,18 +405,18 @@ export class EditorState {
 		}
 	}
 
-	public getTextBeforeDelta(delta:UndoableDelta) {
-		return this.getTextAfterIndex(this.getDeltaIndex(delta)-1);
+	public getTextBeforeDelta(delta:UndoableDelta, asLines:boolean=false) {
+		return this.getTextAfterIndex(this.getDeltaIndex(delta)-1, asLines);
 	}
-	public getTextAfterDelta(delta:UndoableDelta) {
-		return this.getTextAfterIndex(this.getDeltaIndex(delta));
+	public getTextAfterDelta(delta:UndoableDelta, asLines:boolean=false) {
+		return this.getTextAfterIndex(this.getDeltaIndex(delta), asLines);
 	};
 
 	private getDeltaIndex(delta:UndoableDelta):number {
 		return this.deltas.indexOf(delta);
 	}
 
-	private getTextAfterIndex(index:number):string {
+	private getTextAfterIndex(index:number, asLines:boolean):(string|Array<string>) {
 		const cmInterface = {
 			editor: CodeMirror(null),
 			setText: function(value:string) {
@@ -430,8 +431,16 @@ export class EditorState {
 					ch: range.end[1]
 				});
 			},
-			getValue: function() {
+			getValue: function():string {
 				return this.editor.getValue();
+			},
+			getLines: function():Array<string> {
+				let lines:Array<string> = [];
+				const doc = this.editor.getDoc();
+				doc.eachLine((l) => {
+					lines.push(doc.getLine(doc.getLineNumber(l)));
+				});
+				return lines;
 			},
 			destroy: function() {
 				this.editor.clearHistory();
@@ -451,7 +460,7 @@ export class EditorState {
 				continue;
 			}
 		}
-		const value = cmInterface.getValue();
+		const value = asLines ? cmInterface.getLines() : cmInterface.getValue();
 		cmInterface.destroy();
 		return value;
 	}
@@ -487,24 +496,52 @@ export class EditorState {
 	private handleDelta(delta:UndoableDelta, mustPerformChange:boolean):void {
 		const oldDeltaPointer:number = this.deltaPointer;
 
+
 		//Go back and undo any deltas that should have been done after this delta
 		const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(delta.getTimestamp());
+
 		this.moveDeltaPointer(lastDeltaBefore);
-		this.deltas.splice(this.deltaPointer+1, 0, delta)
+		this.deltas.splice(this.deltaPointer+1, 0, delta);
 		if(mustPerformChange === false) {
 			this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
 		}
 		// Go forward and do all of the deltas that come after.
 		this.moveDeltaPointer(oldDeltaPointer+1);
+		this.updateDeltaPointer();
 	}
 	public removeUserCursors(user) {
 		this.remoteCursors.removeUserCursors(user);
 	}
+	private getCurrentTimestamp():number { return this.currentTimestamp; }
+	public setCurrentTimestamp(timestamp:number, extraInfo?) {
+		const editorWrapper = this.getEditorWrapper();
+		this.currentTimestamp = timestamp;
+
+		editorWrapper.setReadOnly(!this.isLatestTimestamp(), extraInfo);
+		this.updateDeltaPointer();
+	};
+	private updateDeltaPointer():void {
+		if(this.isLatestTimestamp()) {
+			this.moveDeltaPointer(this.deltas.length-1);
+		} else {
+			const lastDeltaBefore:number = this.getLastDeltaIndexBeforeTimestamp(this.getCurrentTimestamp());
+			this.moveDeltaPointer(lastDeltaBefore);
+		}
+	};
+	private isLatestTimestamp():boolean {
+		return this.getCurrentTimestamp() === CURRENT;
+	};
+	public hasDeltaAfter(timestamp:number):boolean {
+		return _.last(this.getDeltas()).getTimestamp() > timestamp;
+	};
 }
 
-export class EditorStateTracker {
+export class EditorStateTracker extends EventEmitter {
     private editorStates:{[editorID:number]: EditorState} = {};
-    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) { }
+	private currentTimestamp:number=CURRENT;
+    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
+		super();
+	}
 
 	public getAllEditors():Array<EditorState> {
 		return Object.keys(this.editorStates).map(k => this.editorStates[k]);
@@ -549,10 +586,15 @@ export class EditorStateTracker {
 			es.removeUserCursors(user);
 		});
 	}
+	public hasDeltaAfter(timestamp:number):boolean {
+		return _.any(this.getAllEditors(), (e) => e.hasDeltaAfter(timestamp));
+	};
 	public addHighlight(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):number {
+		this.setCurrentTimestamp(timestamp, extraInfo);
+
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
-			return editorState.addHighlight(range, timestamp, extraInfo);
+			return editorState.addHighlight(range, extraInfo);
 		} else {
 			return -1;
 		}
@@ -566,9 +608,10 @@ export class EditorStateTracker {
 		}
 	}
 	public focus(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):boolean {
+		this.setCurrentTimestamp(timestamp, extraInfo);
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
-			return editorState.focus(range, timestamp, extraInfo);
+			return editorState.focus(range, extraInfo);
 		} else {
 			return false;
 		}
@@ -586,5 +629,29 @@ export class EditorStateTracker {
 		}
 
 		return null;
-	}
+	};
+	public getCurrentTimestamp():number {
+		return this.currentTimestamp;
+	};
+	public setCurrentTimestamp(timestamp:number, extraInfo?):void {
+		if(timestamp !== CURRENT && !this.hasDeltaAfter(timestamp)) {
+			timestamp = CURRENT;
+		}
+		this.currentTimestamp = timestamp;
+		_.each(this.getAllEditors(), (e:EditorState) => {
+			e.setCurrentTimestamp(timestamp, extraInfo);
+		});
+		(this as any).emit('timestampChanged', {
+			timestamp: timestamp
+		});
+	};
+	public toLatestTimestamp(extraInfo?):void {
+		return this.setCurrentTimestamp(CURRENT, extraInfo);
+	};
+	public goBeforeDelta(delta:UndoableDelta, extraInfo?) {
+		this.setCurrentTimestamp(delta.getTimestamp()-1, extraInfo);
+	};
+	public goAfterDelta(delta:UndoableDelta, extraInfo?) {
+		this.setCurrentTimestamp(delta.getTimestamp()+1, extraInfo);
+	};
 }

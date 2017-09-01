@@ -10,10 +10,9 @@ import { CommunicationLayer } from './communication-layer-interface';
 
 declare function require(name:string);
 declare var __dirname:string;
-declare var window;
 
 const DEBUG = false;
-const USE_PUSHER = true;
+const USE_PUSHER = false;
 
 
 /**
@@ -91,12 +90,10 @@ export class ChannelCommunicationService extends EventEmitter {
 
         this.commLayer = commService.commLayer; // Pop this object up a level
 
-        window.cl = this;
-
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
             // Forward the message to the messageGroups tracker
-            this.messageGroups.addMessage(data);
+            this.messageGroups.addTextMessage(data);
             (this as any).emit('message', _.extend({
                 sender: this.userList.getUser(data.uid)
             }, data));
@@ -119,7 +116,7 @@ export class ChannelCommunicationService extends EventEmitter {
                 (this as any).emit('editor-state', data);
 
                 _.each(messageHistory, (m:any) => {
-                    this.messageGroups.addMessage(m);
+                    this.messageGroups.addTextMessage(m);
                     (this as any).emit('message', _.extend({
                         sender: this.userList.getUser(m.uid)
                     }, m));
@@ -279,7 +276,7 @@ export class ChannelCommunicationService extends EventEmitter {
             message: message,
             timestamp: this.getTimestamp()
         };
-        this.messageGroups.addMessage(data);
+        this.messageGroups.addTextMessage(data);
 
         this.commLayer.trigger(this.channelName, 'message', data);
 

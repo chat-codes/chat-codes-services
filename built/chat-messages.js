@@ -4,87 +4,35 @@ const _ = require("underscore");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
 const showdown = require("showdown");
-class EditGroup extends events_1.EventEmitter {
-    constructor(parent, deltas) {
-        super();
-        this.parent = parent;
-        this.deltas = deltas;
+const difflib = require("difflib");
+function tstamp(x) {
+    if (typeof (x) === typeof (1)) {
+        return x;
     }
-    getEarliestTimestamp() { return _.first(this.deltas).getTimestamp(); }
-    getLatestTimestamp() { return _.last(this.deltas).getTimestamp(); }
-    getTimestamp() { return this.getLatestTimestamp(); }
-    getDeltas() { return this.deltas; }
-    addItem(delta) {
-        this.emit('delta-will-be-added', {
-            group: this,
-            delta: delta
-        });
-        const insertionIndex = this.getInsertionIndex(delta.getTimestamp());
-        this.deltas.splice(insertionIndex, 0, delta);
-        this.emit('delta-added', {
-            group: this,
-            insertionIndex: insertionIndex,
-            delta: delta
-        });
-        return insertionIndex;
-    }
-    getTextBefore() {
-        const editorStates = [];
-        const rv = [];
-        this.getDeltas().forEach((d) => {
-            const editorState = d.getEditorState();
-            if (_.indexOf(editorStates, editorState) < 0) {
-                editorStates.push(editorState);
-                rv.push({
-                    editorState: editorState,
-                    value: editorState.getTextBeforeDelta(d)
-                });
-            }
-        });
-        return rv;
-    }
-    getTextAfter() {
-        const editorStates = [];
-        const rv = [];
-        this.getDeltas().forEach((d) => {
-            const editorState = d.getEditorState();
-            if (_.indexOf(editorStates, editorState) < 0) {
-                editorStates.push(editorState);
-                rv.push({
-                    editorState: editorState,
-                    value: editorState.getTextBeforeDelta(d)
-                });
-            }
-        });
-        return rv;
-    }
-    // public getTextBeforeDelta(delta:UndoableDelta) {
-    // 	return this.getTextAfterIndex(this.getDeltaIndex(delta)-1);
-    // }
-    // public getTextAfterDelta(delta:UndoableDelta) {
-    // 	return this.getTextAfterIndex(this.getDeltaIndex(delta));
-    // };
-    getEditorStates() {
-        const editorStates = this.getDeltas().map(delta => delta.getEditorState());
-        return _.unique(editorStates);
-    }
-    getAuthors() {
-        const authors = this.getDeltas().map(delta => delta.getAuthor());
-        return _.unique(authors);
-    }
-    getInsertionIndex(timestamp) {
-        const deltas = this.getDeltas();
-        for (let i = deltas.length - 1; i >= 0; i--) {
-            const delta = this.deltas[i];
-            if (delta.getTimestamp() < timestamp) {
-                return i + 1;
-            }
-        }
-        return 0;
+    else {
+        return x.getTimestamp();
     }
 }
-exports.EditGroup = EditGroup;
-class Message {
+function before(a, b) {
+    return tstamp(a) < tstamp(b);
+}
+function after(a, b) {
+    return tstamp(a) > tstamp(b);
+}
+function beforeEQ(a, b) {
+    return tstamp(a) <= tstamp(b);
+}
+function afterEQ(a, b) {
+    return tstamp(a) >= tstamp(b);
+}
+function reverseArr(input) {
+    var ret = new Array;
+    for (var i = input.length - 1; i >= 0; i--) {
+        ret.push(input[i]);
+    }
+    return ret;
+}
+class TextMessage {
     constructor(sender, timestamp, message, editorStateTracker) {
         this.sender = sender;
         this.timestamp = timestamp;
@@ -146,70 +94,172 @@ class Message {
     }
     ;
 }
-exports.Message = Message;
-/*
- * MessageGroup represents a group of messages that were sent by the same user *around*
- * the same time with no other users interrupting.
- */
-class MessageGroup extends events_1.EventEmitter {
-    constructor(parent, chatUserList, editorStateTracker, messages) {
+exports.TextMessage = TextMessage;
+class Group extends events_1.EventEmitter {
+    constructor(items) {
         super();
-        this.parent = parent;
-        this.chatUserList = chatUserList;
-        this.editorStateTracker = editorStateTracker;
-        this.messages = [];
-        _.each(messages, (m) => { this.doAddMessage(m); });
+        this.items = [];
+        items.forEach((item) => {
+            this.doAddItem(item);
+        });
     }
-    getLinkDataInfo(html) {
-        var htmlLatter = html.substring(html.indexOf("<a href=\"") + "<a href=\"".length);
-        var linkedDataInfo = htmlLatter.substring(htmlLatter.indexOf("\">") + 2, htmlLatter.indexOf("</a>"));
-        return linkedDataInfo;
+    ;
+    getItems() { return this.items; }
+    getEarliestItem() { return _.first(this.getItems()); }
+    getLatestItem() { return _.last(this.getItems()); }
+    getEarliestTimestamp() { return this.getEarliestItem().getTimestamp(); }
+    getLatestTimestamp() { return this.getLatestItem().getTimestamp(); }
+    includesTimestamp(timestamp) {
+        return afterEQ(timestamp, this.getEarliestTimestamp()) && beforeEQ(timestamp, this.getLatestTimestamp());
     }
-    doAddMessage(message) {
-        const editorStateTracker = this.parent.editorStateTracker;
-        const sender = this.chatUserList.getUser(message.uid);
-        this.sender = sender;
-        const messageObject = new Message(sender, message.timestamp, message.message, this.editorStateTracker);
-        const insertionIndex = this.getInsertionIndex(messageObject.getTimestamp());
-        this.messages.splice(insertionIndex, 0, messageObject);
+    ;
+    occuredBefore(item) {
+        return before(this.getLatestTimestamp(), item);
+    }
+    ;
+    occuredBeforeEQ(item) {
+        return beforeEQ(this.getLatestTimestamp(), item);
+    }
+    ;
+    occuredAfter(item) {
+        return after(this.getLatestTimestamp(), item);
+    }
+    ;
+    occuredAfterEQ(item) {
+        return afterEQ(this.getLatestTimestamp(), item);
+    }
+    ;
+    getInsertionIndex(timestamp) {
+        const items = this.getItems();
+        let i = items.length - 1;
+        for (; i >= 0; i--) {
+            if (before(this.items[i], timestamp)) {
+                return i + 1;
+            }
+        }
+        return i;
+    }
+    split(timestamp) {
+        const index = this.getInsertionIndex(timestamp);
+        const beforeIndex = new Group(this.items.slice(0, index));
+        const afterIndex = new Group(this.items.slice(index));
+        return [beforeIndex, afterIndex];
+    }
+    ;
+    doAddItem(item) {
+        const insertionIndex = this.getInsertionIndex(item.getTimestamp());
+        this.items.splice(insertionIndex, 0, item);
         return {
             insertionIndex: insertionIndex,
-            messageObject: messageObject
+            item: item
         };
     }
     ;
-    addItem(message) {
-        this.emit('message-will-be-added', {
+    addItem(titem) {
+        this.emit('item-will-be-added', {
             group: this,
-            message: message
+            item: titem
         });
-        const { insertionIndex, messageObject } = this.doAddMessage(message);
-        this.emit('message-added', {
+        const { insertionIndex, item } = this.doAddItem(titem);
+        this.emit('item-added', {
             group: this,
-            message: messageObject,
+            item: titem,
             insertionIndex: insertionIndex
         });
         return insertionIndex;
     }
     ;
-    getSender() { return this.sender; }
-    getMessages() { return this.messages; }
-    getTimestamp() { return this.getLatestTimestamp(); }
+    compatibleWith(item) {
+        return true;
+    }
     ;
-    getEarliestTimestamp() { return _.first(this.messages).getTimestamp(); }
-    getLatestTimestamp() { return _.last(this.messages).getTimestamp(); }
-    getInsertionIndex(timestamp) {
-        const messages = this.getMessages();
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const message = this.messages[i];
-            if (message.getTimestamp() < timestamp) {
-                return i + 1;
+}
+class EditGroup extends Group {
+    getDiffSummary() {
+        const textBefore = this.getTextBefore();
+        const textAfter = this.getTextAfter();
+        const diffs = [];
+        for (let i = 0; i < textBefore.length; i++) {
+            let tbEditorState = textBefore[i].editorState;
+            for (let j = 0; j < textAfter.length; j++) {
+                let taEditorState = textAfter[j].editorState;
+                if (taEditorState === tbEditorState) {
+                    const editorState = taEditorState;
+                    const valueBefore = textBefore[i].value;
+                    const valueAfter = textAfter[j].value;
+                    let diff = difflib.unifiedDiff(valueBefore, valueAfter, { fromfile: editorState.getTitle(), tofile: editorState.getTitle() });
+                    diff[0] = diff[0].trim();
+                    diff[1] = diff[1].trim();
+                    diff = diff.join('\n');
+                    diffs.push({
+                        editorState: editorState,
+                        valueBefore: valueBefore,
+                        valueAfter: valueBefore,
+                        diff: diff
+                    });
+                    break;
+                }
             }
         }
-        return 0;
+        return diffs;
     }
+    ;
+    getTextBefore() {
+        const editorStates = [];
+        const rv = [];
+        this.getItems().forEach((d) => {
+            const editorState = d.getEditorState();
+            if (_.indexOf(editorStates, editorState) < 0) {
+                editorStates.push(editorState);
+                rv.push({
+                    editorState: editorState,
+                    value: editorState.getTextBeforeDelta(d, true)
+                });
+            }
+        });
+        return rv;
+    }
+    getTextAfter() {
+        const editorStates = [];
+        const rv = [];
+        reverseArr(this.getItems()).forEach((d) => {
+            const editorState = d.getEditorState();
+            if (_.indexOf(editorStates, editorState) < 0) {
+                editorStates.push(editorState);
+                rv.push({
+                    editorState: editorState,
+                    value: editorState.getTextAfterDelta(d, true)
+                });
+            }
+        });
+        return rv;
+    }
+    getEditorStates() {
+        const editorStates = this.getItems().map(delta => delta.getEditorState());
+        return _.unique(editorStates);
+    }
+    getAuthors() {
+        const authors = this.getItems().map(delta => delta.getAuthor());
+        return _.unique(authors);
+    }
+    compatibleWith(item) {
+        return item instanceof editor_state_tracker_1.EditDelta;
+    }
+    ;
 }
-exports.MessageGroup = MessageGroup;
+exports.EditGroup = EditGroup;
+/*
+ * MessageGroup represents a group of messages that were sent by the same user *around*
+ * the same time with no other users interrupting.
+ */
+class TextMessageGroup extends Group {
+    getSender() { return this.getEarliestItem().getSender(); }
+    compatibleWith(item) {
+        return item instanceof TextMessage && item.getSender() === this.getSender();
+    }
+    ;
+}
+exports.TextMessageGroup = TextMessageGroup;
 ;
 /*
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
@@ -227,90 +277,80 @@ class MessageGroups extends events_1.EventEmitter {
     getMessageHistory() {
         return this.messages;
     }
-    getAppropriateGroup(checkMatch, CheckClass) {
-        for (let i = this.messageGroups.length - 1; i >= 0; i--) {
+    typeMatches(item, group) {
+        return (group instanceof EditGroup && item instanceof editor_state_tracker_1.EditDelta) ||
+            (group instanceof TextMessageGroup && item instanceof TextMessage);
+    }
+    addItem(item) {
+        const itemTimestamp = item.getTimestamp();
+        let insertedIntoExistingGroup = false;
+        let i = this.messageGroups.length - 1;
+        for (; i >= 0; i--) {
             const messageGroup = this.messageGroups[i];
-            // if(messageGroup instanceof CheckClass) {
-            if (checkMatch(messageGroup)) {
-                return messageGroup;
+            const previousMessageGroup = this.messageGroups[i - 1];
+            if (messageGroup.includesTimestamp(itemTimestamp)) {
+                if (messageGroup.compatibleWith(item)) {
+                    messageGroup.addItem(item);
+                    insertedIntoExistingGroup = true;
+                    break;
+                }
+                else {
+                    this.emit('group-will-be-removed', {
+                        messageGroup: messageGroup,
+                        insertionIndex: i
+                    });
+                    this.messageGroups.splice(i, 1);
+                    this.emit('group-removed', {
+                        messageGroup: messageGroup,
+                        insertionIndex: i
+                    });
+                    this.messageGroups.splice(i, 0, ...messageGroup.split(itemTimestamp));
+                    i += 2; // on the next loop, will be at the later split
+                    continue;
+                }
             }
-            else {
+            else if (messageGroup.occuredBefore(itemTimestamp)) {
+                if (messageGroup.compatibleWith(item) && (itemTimestamp <= messageGroup.getEarliestTimestamp() + this.messageGroupingTimeThreshold)) {
+                    messageGroup.addItem(item);
+                    insertedIntoExistingGroup = true;
+                }
                 break;
             }
-            // }
         }
-        return null;
-    }
-    getInsertionIndex(timestamp) {
-        for (let i = this.messageGroups.length - 1; i >= 0; i--) {
-            const messageGroup = this.messageGroups[i];
-            if (messageGroup.getLatestTimestamp() < timestamp) {
-                return i + 1;
+        if (!insertedIntoExistingGroup) {
+            const insertionIndex = i + 1;
+            let group;
+            if (item instanceof TextMessage) {
+                group = new TextMessageGroup([item]);
             }
+            else {
+                group = new EditGroup([item]);
+            }
+            this.emit('group-will-be-added', {
+                messageGroup: group,
+                insertionIndex: insertionIndex
+            });
+            this.messageGroups.splice(insertionIndex, 0, group);
+            this.emit('group-added', {
+                messageGroup: group,
+                insertionIndex: insertionIndex
+            });
         }
-        return 0;
     }
-    addMessage(data) {
+    addTextMessage(data) {
         this.messages.push(data);
-        let groupToAddTo = this.getAppropriateGroup((g) => ((g instanceof MessageGroup) &&
-            ((data.timestamp >= g.getLatestTimestamp() - this.messageGroupingTimeThreshold) ||
-                (data.timestamp <= g.getEarliestTimestamp() + this.messageGroupingTimeThreshold)) &&
-            g.getSender().getID() === data.uid), MessageGroup);
-        if (groupToAddTo) {
-            groupToAddTo.addItem(data);
-        }
-        else {
-            // Add to a new group
-            groupToAddTo = new MessageGroup(this, this.chatUserList, this.editorStateTracker, [data]);
-            let insertionIndex = this.getInsertionIndex(data.timestamp);
-            this.emit('group-will-be-added', {
-                messageGroup: groupToAddTo,
-                insertionIndex: insertionIndex
-            });
-            this.messageGroups.splice(insertionIndex, 0, groupToAddTo);
-            this.emit('group-added', {
-                messageGroup: groupToAddTo,
-                insertionIndex: insertionIndex
-            });
-            groupToAddTo.on('message-will-be-added', (event) => {
-                this.emit('message-will-be-added', event);
-            });
-            groupToAddTo.on('message-added', (event) => {
-                this.emit('message-added', event);
-            });
-        }
+        const sender = this.chatUserList.getUser(data.uid);
+        const message = new TextMessage(sender, data.timestamp, data.message, this.editorStateTracker);
+        return this.addItem(message);
     }
-    getMessageGroups() { return this.messageGroups; }
+    ;
     addDelta(delta) {
-        if (!(delta instanceof editor_state_tracker_1.EditDelta)) {
-            return;
-        }
-        let groupToAddTo = this.getAppropriateGroup((g) => ((g instanceof EditGroup) &&
-            ((delta.getTimestamp() >= g.getLatestTimestamp() - this.messageGroupingTimeThreshold) ||
-                (delta.getTimestamp() <= g.getEarliestTimestamp() + this.messageGroupingTimeThreshold))), EditGroup);
-        if (groupToAddTo) {
-            groupToAddTo.addItem(delta);
-        }
-        else {
-            groupToAddTo = new EditGroup(this, [delta]);
-            let insertionIndex = this.getInsertionIndex(delta.getTimestamp());
-            this.emit('group-will-be-added', {
-                messageGroup: groupToAddTo,
-                insertionIndex: insertionIndex
-            });
-            this.messageGroups.splice(insertionIndex, 0, groupToAddTo);
-            this.emit('group-added', {
-                messageGroup: groupToAddTo,
-                insertionIndex: insertionIndex
-            });
-            groupToAddTo.on('delta-will-be-added', (event) => {
-                this.emit('delta-will-be-added', event);
-            });
-            groupToAddTo.on('delta-added', (event) => {
-                this.emit('delta-added', event);
-            });
+        if (delta instanceof editor_state_tracker_1.EditDelta) {
+            this.addItem(delta);
         }
     }
+    ;
+    getMessageGroups() { return this.messageGroups; }
     /**
      * Returns true if there are no messages and false otherwise
      * @return {boolean} If there are no messages

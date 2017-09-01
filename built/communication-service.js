@@ -8,7 +8,7 @@ const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const DEBUG = false;
-const USE_PUSHER = true;
+const USE_PUSHER = false;
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
  * numbers to the channel name
@@ -78,11 +78,10 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new chat_messages_1.MessageGroups(this.userList, this.editorStateTracker);
         this.commLayer = commService.commLayer; // Pop this object up a level
-        window.cl = this;
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
             // Forward the message to the messageGroups tracker
-            this.messageGroups.addMessage(data);
+            this.messageGroups.addTextMessage(data);
             this.emit('message', _.extend({
                 sender: this.userList.getUser(data.uid)
             }, data));
@@ -102,7 +101,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
                 });
                 this.emit('editor-state', data);
                 _.each(messageHistory, (m) => {
-                    this.messageGroups.addMessage(m);
+                    this.messageGroups.addTextMessage(m);
                     this.emit('message', _.extend({
                         sender: this.userList.getUser(m.uid)
                     }, m));
@@ -248,7 +247,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             message: message,
             timestamp: this.getTimestamp()
         };
-        this.messageGroups.addMessage(data);
+        this.messageGroups.addTextMessage(data);
         this.commLayer.trigger(this.channelName, 'message', data);
         this.emit('message', _.extend({
             sender: this.userList.getMe()

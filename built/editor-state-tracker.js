@@ -1,10 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+//<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
 const CodeMirror = require("codemirror");
 ;
+const CURRENT = -1;
 /*
  * Tracks a set of remote cursors.
  */
@@ -288,6 +290,7 @@ class EditorState {
         this.selections = {};
         this.remoteCursors = new RemoteCursorMarker(this);
         this.deltaPointer = -1;
+        this.currentTimestamp = CURRENT;
         let state = _.extend({
             isOpen: true,
             deltas: [],
@@ -300,9 +303,7 @@ class EditorState {
                 this.addDelta(d, true);
             });
         }
-        state.cursors.forEach((c) => {
-            console.log(c);
-        });
+        state.cursors.forEach((c) => { });
     }
     serialize() {
         return {
@@ -335,16 +336,13 @@ class EditorState {
     ;
     getIsModified() { return this.modified; }
     ;
-    addHighlight(range, timestamp = null, extraInfo) {
-        this.revertToTimestamp(timestamp, extraInfo);
+    addHighlight(range, extraInfo) {
         return this.getEditorWrapper().addHighlight(range, extraInfo);
     }
     removeHighlight(highlightID, extraInfo) {
-        this.revertToTimestamp(null, extraInfo);
         return this.getEditorWrapper().removeHighlight(highlightID, extraInfo);
     }
-    focus(range, timestamp = null, extraInfo) {
-        this.revertToTimestamp(timestamp, extraInfo);
+    focus(range, extraInfo) {
         return this.getEditorWrapper().focus(range, extraInfo);
     }
     moveDeltaPointer(index) {
@@ -388,17 +386,17 @@ class EditorState {
             this.moveDeltaPointer(this.deltas.length - 1);
         }
     }
-    getTextBeforeDelta(delta) {
-        return this.getTextAfterIndex(this.getDeltaIndex(delta) - 1);
+    getTextBeforeDelta(delta, asLines = false) {
+        return this.getTextAfterIndex(this.getDeltaIndex(delta) - 1, asLines);
     }
-    getTextAfterDelta(delta) {
-        return this.getTextAfterIndex(this.getDeltaIndex(delta));
+    getTextAfterDelta(delta, asLines = false) {
+        return this.getTextAfterIndex(this.getDeltaIndex(delta), asLines);
     }
     ;
     getDeltaIndex(delta) {
         return this.deltas.indexOf(delta);
     }
-    getTextAfterIndex(index) {
+    getTextAfterIndex(index, asLines) {
         const cmInterface = {
             editor: CodeMirror(null),
             setText: function (value) {
@@ -415,6 +413,14 @@ class EditorState {
             },
             getValue: function () {
                 return this.editor.getValue();
+            },
+            getLines: function () {
+                let lines = [];
+                const doc = this.editor.getDoc();
+                doc.eachLine((l) => {
+                    lines.push(doc.getLine(doc.getLineNumber(l)));
+                });
+                return lines;
             },
             destroy: function () {
                 this.editor.clearHistory();
@@ -436,7 +442,7 @@ class EditorState {
                 continue;
             }
         }
-        const value = cmInterface.getValue();
+        const value = asLines ? cmInterface.getLines() : cmInterface.getValue();
         cmInterface.destroy();
         return value;
     }
@@ -482,18 +488,47 @@ class EditorState {
         }
         // Go forward and do all of the deltas that come after.
         this.moveDeltaPointer(oldDeltaPointer + 1);
+        this.updateDeltaPointer();
     }
     removeUserCursors(user) {
         this.remoteCursors.removeUserCursors(user);
     }
+    getCurrentTimestamp() { return this.currentTimestamp; }
+    setCurrentTimestamp(timestamp, extraInfo) {
+        const editorWrapper = this.getEditorWrapper();
+        this.currentTimestamp = timestamp;
+        editorWrapper.setReadOnly(!this.isLatestTimestamp(), extraInfo);
+        this.updateDeltaPointer();
+    }
+    ;
+    updateDeltaPointer() {
+        if (this.isLatestTimestamp()) {
+            this.moveDeltaPointer(this.deltas.length - 1);
+        }
+        else {
+            const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(this.getCurrentTimestamp());
+            this.moveDeltaPointer(lastDeltaBefore);
+        }
+    }
+    ;
+    isLatestTimestamp() {
+        return this.getCurrentTimestamp() === CURRENT;
+    }
+    ;
+    hasDeltaAfter(timestamp) {
+        return _.last(this.getDeltas()).getTimestamp() > timestamp;
+    }
+    ;
 }
 exports.EditorState = EditorState;
-class EditorStateTracker {
+class EditorStateTracker extends events_1.EventEmitter {
     constructor(EditorWrapperClass, channelCommunicationService, userList) {
+        super();
         this.EditorWrapperClass = EditorWrapperClass;
         this.channelCommunicationService = channelCommunicationService;
         this.userList = userList;
         this.editorStates = {};
+        this.currentTimestamp = CURRENT;
     }
     getAllEditors() {
         return Object.keys(this.editorStates).map(k => this.editorStates[k]);
@@ -535,10 +570,15 @@ class EditorStateTracker {
             es.removeUserCursors(user);
         });
     }
+    hasDeltaAfter(timestamp) {
+        return _.any(this.getAllEditors(), (e) => e.hasDeltaAfter(timestamp));
+    }
+    ;
     addHighlight(editorID, range, timestamp, extraInfo = {}) {
+        this.setCurrentTimestamp(timestamp, extraInfo);
         const editorState = this.getEditorState(editorID);
         if (editorState) {
-            return editorState.addHighlight(range, timestamp, extraInfo);
+            return editorState.addHighlight(range, extraInfo);
         }
         else {
             return -1;
@@ -554,9 +594,10 @@ class EditorStateTracker {
         }
     }
     focus(editorID, range, timestamp, extraInfo = {}) {
+        this.setCurrentTimestamp(timestamp, extraInfo);
         const editorState = this.getEditorState(editorID);
         if (editorState) {
-            return editorState.focus(range, timestamp, extraInfo);
+            return editorState.focus(range, extraInfo);
         }
         else {
             return false;
@@ -575,6 +616,36 @@ class EditorStateTracker {
         }
         return null;
     }
+    ;
+    getCurrentTimestamp() {
+        return this.currentTimestamp;
+    }
+    ;
+    setCurrentTimestamp(timestamp, extraInfo) {
+        if (timestamp !== CURRENT && !this.hasDeltaAfter(timestamp)) {
+            timestamp = CURRENT;
+        }
+        this.currentTimestamp = timestamp;
+        _.each(this.getAllEditors(), (e) => {
+            e.setCurrentTimestamp(timestamp, extraInfo);
+        });
+        this.emit('timestampChanged', {
+            timestamp: timestamp
+        });
+    }
+    ;
+    toLatestTimestamp(extraInfo) {
+        return this.setCurrentTimestamp(CURRENT, extraInfo);
+    }
+    ;
+    goBeforeDelta(delta, extraInfo) {
+        this.setCurrentTimestamp(delta.getTimestamp() - 1, extraInfo);
+    }
+    ;
+    goAfterDelta(delta, extraInfo) {
+        this.setCurrentTimestamp(delta.getTimestamp() + 1, extraInfo);
+    }
+    ;
 }
 exports.EditorStateTracker = EditorStateTracker;
 //# sourceMappingURL=editor-state-tracker.js.map
