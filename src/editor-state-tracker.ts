@@ -609,6 +609,7 @@ export class EditorStateTracker extends EventEmitter {
 	}
 	public focus(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):boolean {
 		this.setCurrentTimestamp(timestamp, extraInfo);
+		
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
 			return editorState.focus(range, extraInfo);
@@ -656,5 +657,11 @@ export class EditorStateTracker extends EventEmitter {
 	};
 	public isAtLatest():boolean {
 		return this.getCurrentTimestamp() === CURRENT;
+	};
+	public isShowingCodeBefore(delta:UndoableDelta):boolean {
+		return this.getCurrentTimestamp() === delta.getTimestamp()-1;
+	}
+	public isShowingCodeAfter(delta:UndoableDelta):boolean {
+		return this.getCurrentTimestamp() === delta.getTimestamp()+1;
 	}
 }

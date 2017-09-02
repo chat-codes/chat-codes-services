@@ -353,6 +353,12 @@ class MessageGroups extends events_1.EventEmitter {
             messageGroup: group,
             insertionIndex: insertionIndex
         });
+        group.on('item-will-be-added', (event) => {
+            this.emit('item-will-be-added', event);
+        });
+        group.on('item-added', (event) => {
+            this.emit('item-added', event);
+        });
     }
     addTextMessage(data) {
         this.messages.push(data);

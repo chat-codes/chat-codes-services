@@ -347,6 +347,12 @@ export class MessageGroups extends EventEmitter {
 			messageGroup: group,
 			insertionIndex: insertionIndex
 		});
+		group.on('item-will-be-added', (event) => {
+			(this as any).emit('item-will-be-added', event);
+		});
+		group.on('item-added', (event) => {
+			(this as any).emit('item-added', event);
+		});
 	}
 
 	public addTextMessage(data) {
