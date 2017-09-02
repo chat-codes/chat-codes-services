@@ -654,4 +654,7 @@ export class EditorStateTracker extends EventEmitter {
 	public goAfterDelta(delta:UndoableDelta, extraInfo?) {
 		this.setCurrentTimestamp(delta.getTimestamp()+1, extraInfo);
 	};
+	public isAtLatest():boolean {
+		return this.getCurrentTimestamp() === CURRENT;
+	}
 }

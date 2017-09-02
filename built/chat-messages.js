@@ -141,8 +141,8 @@ class Group extends events_1.EventEmitter {
     }
     split(timestamp) {
         const index = this.getInsertionIndex(timestamp);
-        const beforeIndex = new Group(this.items.slice(0, index));
-        const afterIndex = new Group(this.items.slice(index));
+        const beforeIndex = this.constructNew(this.items.slice(0, index));
+        const afterIndex = this.constructNew(this.items.slice(index));
         return [beforeIndex, afterIndex];
     }
     ;
@@ -171,6 +171,10 @@ class Group extends events_1.EventEmitter {
     ;
     compatibleWith(item) {
         return true;
+    }
+    ;
+    constructNew(items) {
+        return new Group(items);
     }
     ;
 }
@@ -246,6 +250,10 @@ class EditGroup extends Group {
         return item instanceof editor_state_tracker_1.EditDelta;
     }
     ;
+    constructNew(items) {
+        return new EditGroup(items);
+    }
+    ;
 }
 exports.EditGroup = EditGroup;
 /*
@@ -256,6 +264,10 @@ class TextMessageGroup extends Group {
     getSender() { return this.getEarliestItem().getSender(); }
     compatibleWith(item) {
         return item instanceof TextMessage && item.getSender() === this.getSender();
+    }
+    ;
+    constructNew(items) {
+        return new TextMessageGroup(items);
     }
     ;
 }
@@ -287,7 +299,6 @@ class MessageGroups extends events_1.EventEmitter {
         let i = this.messageGroups.length - 1;
         for (; i >= 0; i--) {
             const messageGroup = this.messageGroups[i];
-            const previousMessageGroup = this.messageGroups[i - 1];
             if (messageGroup.includesTimestamp(itemTimestamp)) {
                 if (messageGroup.compatibleWith(item)) {
                     messageGroup.addItem(item);
@@ -304,8 +315,11 @@ class MessageGroups extends events_1.EventEmitter {
                         messageGroup: messageGroup,
                         insertionIndex: i
                     });
-                    this.messageGroups.splice(i, 0, ...messageGroup.split(itemTimestamp));
-                    i += 2; // on the next loop, will be at the later split
+                    const splitGroup = messageGroup.split(itemTimestamp);
+                    splitGroup.forEach((mg, j) => {
+                        this.addGroup(mg, i + j);
+                    });
+                    i += splitGroup.length; // on the next loop, will be at the later split
                     continue;
                 }
             }
@@ -326,16 +340,19 @@ class MessageGroups extends events_1.EventEmitter {
             else {
                 group = new EditGroup([item]);
             }
-            this.emit('group-will-be-added', {
-                messageGroup: group,
-                insertionIndex: insertionIndex
-            });
-            this.messageGroups.splice(insertionIndex, 0, group);
-            this.emit('group-added', {
-                messageGroup: group,
-                insertionIndex: insertionIndex
-            });
+            this.addGroup(group, insertionIndex);
         }
+    }
+    addGroup(group, insertionIndex) {
+        this.emit('group-will-be-added', {
+            messageGroup: group,
+            insertionIndex: insertionIndex
+        });
+        this.messageGroups.splice(insertionIndex, 0, group);
+        this.emit('group-added', {
+            messageGroup: group,
+            insertionIndex: insertionIndex
+        });
     }
     addTextMessage(data) {
         this.messages.push(data);

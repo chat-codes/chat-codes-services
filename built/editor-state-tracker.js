@@ -646,6 +646,9 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.setCurrentTimestamp(delta.getTimestamp() + 1, extraInfo);
     }
     ;
+    isAtLatest() {
+        return this.getCurrentTimestamp() === CURRENT;
+    }
 }
 exports.EditorStateTracker = EditorStateTracker;
 //# sourceMappingURL=editor-state-tracker.js.map

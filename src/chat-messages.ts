@@ -145,8 +145,8 @@ class Group<T extends Timestamped> extends EventEmitter implements MessageGroup<
 	}
 	public split(timestamp:number):Array<Group<T>> {
 		const index = this.getInsertionIndex(timestamp);
-		const beforeIndex = new Group<T>(this.items.slice(0, index));
-		const afterIndex = new Group<T>(this.items.slice(index));
+		const beforeIndex = this.constructNew(this.items.slice(0, index));
+		const afterIndex = this.constructNew(this.items.slice(index));
 		return [beforeIndex, afterIndex];
 	};
 	private doAddItem(item:T) {
@@ -172,6 +172,9 @@ class Group<T extends Timestamped> extends EventEmitter implements MessageGroup<
 	};
 	public compatibleWith(item:any):boolean {
 		return true;
+	};
+	protected constructNew(items):Group<T> {
+		return new Group<T>(items);
 	};
 }
 
@@ -247,6 +250,9 @@ export class EditGroup extends Group<UndoableDelta> {
 	public compatibleWith(item:any):boolean {
 		return item instanceof EditDelta;
 	};
+	protected constructNew(items):EditGroup {
+		return new EditGroup(items);
+	};
 }
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
@@ -256,6 +262,9 @@ export class TextMessageGroup extends Group<TextMessage> {
 	public getSender():ChatUser { return this.getEarliestItem().getSender(); }
 	public compatibleWith(item:TextMessage):boolean {
 		return item instanceof TextMessage && item.getSender() === this.getSender();
+	};
+	protected constructNew(items):TextMessageGroup {
+		return new TextMessageGroup(items);
 	};
 };
 
@@ -286,7 +295,6 @@ export class MessageGroups extends EventEmitter {
 
 		for(; i>=0; i--) {
 			const messageGroup = this.messageGroups[i];
-			const previousMessageGroup = this.messageGroups[i-1];
 			if(messageGroup.includesTimestamp(itemTimestamp)) {
 				if(messageGroup.compatibleWith(item)) {
 					messageGroup.addItem(item);
@@ -302,8 +310,11 @@ export class MessageGroups extends EventEmitter {
 						messageGroup: messageGroup,
 						insertionIndex: i
 					});
-					this.messageGroups.splice(i, 0, ...messageGroup.split(itemTimestamp));
-					i+=2; // on the next loop, will be at the later split
+					const splitGroup = messageGroup.split(itemTimestamp);
+					splitGroup.forEach((mg, j) => {
+						this.addGroup(mg, i+j);
+					});
+					i+=splitGroup.length; // on the next loop, will be at the later split
 					continue;
 				}
 			} else if(messageGroup.occuredBefore(itemTimestamp)) {
@@ -323,19 +334,19 @@ export class MessageGroups extends EventEmitter {
 			} else {
 				group = new EditGroup([item]);
 			}
-
-			(this as any).emit('group-will-be-added', {
-				messageGroup: group,
-				insertionIndex: insertionIndex
-			});
-
-			this.messageGroups.splice(insertionIndex, 0, group);
-
-			(this as any).emit('group-added', {
-				messageGroup: group,
-				insertionIndex: insertionIndex
-			});
+			this.addGroup(group, insertionIndex);
 		}
+	}
+	private addGroup(group:Group<UndoableDelta|TextMessage>, insertionIndex:number) {
+		(this as any).emit('group-will-be-added', {
+			messageGroup: group,
+			insertionIndex: insertionIndex
+		});
+		this.messageGroups.splice(insertionIndex, 0, group);
+		(this as any).emit('group-added', {
+			messageGroup: group,
+			insertionIndex: insertionIndex
+		});
 	}
 
 	public addTextMessage(data) {
