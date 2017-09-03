@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
+const commandLineArgs = require("command-line-args");
 class ChatCodesSocketIOServer {
     constructor(port) {
         this.port = port;
@@ -9,9 +10,11 @@ class ChatCodesSocketIOServer {
         this.members = {};
         this.io = sio(this.port);
         this.io.on('connection', (socket) => {
+            const { id } = socket;
             socket.on('request-join-room', (roomName, callback) => {
                 const ns = this.getNamespace(roomName);
                 callback();
+                console.log(`Client (${id}) requested to join ${roomName}`);
             });
             socket.on('channel-available', (roomName, callback) => {
                 const ns = this.getNamespace(roomName);
@@ -20,9 +23,13 @@ class ChatCodesSocketIOServer {
                         console.error(err);
                     }
                     callback(clients.length === 0);
+                    console.log(`Telling (${id}) that ${roomName} is${clients.length === 0 ? " " : " not "}available`);
                 });
+                console.log(`Client (${id}) asked if ${roomName} is available`);
             });
+            console.log(`Client connected (id: ${id})`);
         });
+        console.log(`Created server on port ${port}`);
     }
     ;
     getNamespace(name) {
@@ -44,12 +51,14 @@ class ChatCodesSocketIOServer {
                     member.info.name = username;
                     callback();
                     s.broadcast.emit('member-added', member);
+                    console.log(`Client (${id} in ${name}) set username to ${username}`);
                 });
                 s.on('data', (eventName, payload) => {
                     s.broadcast.emit(`data-${eventName}`, payload);
                 });
                 s.on('disconnect', () => {
                     s.broadcast.emit('member-removed', member);
+                    console.log(`Client (${id} in ${name}) disconnected`);
                 });
                 s.on('get-members', (callback) => {
                     ns.clients((err, clients) => {
@@ -67,7 +76,9 @@ class ChatCodesSocketIOServer {
                             count: clients.length
                         });
                     });
+                    console.log(`Client (${id} in ${name}) requested members`);
                 });
+                console.log(`Client connected to namespace ${name} (${id})`);
             });
             this.namespaces[name] = ns;
             return this.namespaces[name];
@@ -78,5 +89,9 @@ class ChatCodesSocketIOServer {
     }
 }
 exports.ChatCodesSocketIOServer = ChatCodesSocketIOServer;
-const server = new ChatCodesSocketIOServer(8888);
+const optionDefinitions = [
+    { name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: 3000 }
+];
+const options = commandLineArgs(optionDefinitions);
+const server = new ChatCodesSocketIOServer(options.port);
 //# sourceMappingURL=socketio_server.js.map

@@ -4,7 +4,7 @@
     "description": "",
     "main": "built/socketio_server.js",
     "scripts": {
-        "start": "built/socketio_server.js"
+        "start": "built/socketio_server.js -p 3000"
     },
     "dependencies": {
         "@types/codemirror": "0.0.46",
@@ -13,6 +13,7 @@
         "@types/socket.io-client": "^1.4.30",
         "@types/underscore": "^1.8.2",
         "codemirror": "^5.29.0",
+        "command-line-args": "^4.0.7",
         "diff": "^3.3.0",
         "difflib": "^0.2.4",
         "fuzzyset.js": "0.0.4",

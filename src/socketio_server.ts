@@ -1,5 +1,6 @@
 import * as sio from 'socket.io';
 import * as _ from 'underscore';
+import * as commandLineArgs from 'command-line-args';
 
 export class ChatCodesSocketIOServer {
 	private io:SocketIO.Server;
@@ -8,18 +9,24 @@ export class ChatCodesSocketIOServer {
 	constructor(private port:number) {
 		this.io = sio(this.port);
 		this.io.on('connection', (socket:SocketIO.Socket) => {
+			const {id} = socket;
 			socket.on('request-join-room', (roomName:string, callback) => {
 				const ns = this.getNamespace(roomName);
 				callback();
+				console.log(`Client (${id}) requested to join ${roomName}`);
 			});
 			socket.on('channel-available', (roomName:string, callback) => {
 				const ns = this.getNamespace(roomName);
 				ns.clients((err, clients) => {
 					if(err) { console.error(err); }
 					callback(clients.length === 0);
+					console.log(`Telling (${id}) that ${roomName} is${clients.length===0?" ":" not "}available`);
 				});
+				console.log(`Client (${id}) asked if ${roomName} is available`);
 			});
+			console.log(`Client connected (id: ${id})`)
 		});
+		console.log(`Created server on port ${port}`)
 	}
 	public getNamespace(name:string):SocketIO.Namespace {
 		if(_.has(this.namespaces, name)) {
@@ -41,6 +48,7 @@ export class ChatCodesSocketIOServer {
 					callback();
 
 					s.broadcast.emit('member-added', member);
+					console.log(`Client (${id} in ${name}) set username to ${username}`);
 				});
 
 				s.on('data', (eventName:string, payload:any) => {
@@ -48,6 +56,7 @@ export class ChatCodesSocketIOServer {
 				});
 				s.on('disconnect', () => {
 					s.broadcast.emit('member-removed', member);
+					console.log(`Client (${id} in ${name}) disconnected`);
 				});
 
 				s.on('get-members', (callback) => {
@@ -64,7 +73,9 @@ export class ChatCodesSocketIOServer {
 							count: clients.length
 						});
 					});
+					console.log(`Client (${id} in ${name}) requested members`);
 				});
+				console.log(`Client connected to namespace ${name} (${id})`);
 			});
 			this.namespaces[name] = ns;
 			return this.namespaces[name];
@@ -75,4 +86,9 @@ export class ChatCodesSocketIOServer {
 	}
 }
 
-const server = new ChatCodesSocketIOServer(8888);
+const optionDefinitions = [
+	{ name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: 3000}
+];
+const options = commandLineArgs(optionDefinitions);
+
+const server = new ChatCodesSocketIOServer(options.port);
