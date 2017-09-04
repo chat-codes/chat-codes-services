@@ -4,7 +4,7 @@
     "description": "",
     "main": "node built/server/socketio_server.js",
     "scripts": {
-        "start": "node built/server/socketio_server.js -p 3000"
+        "start": "node built/server/socketio_server.js"
     },
     "dependencies": {
         "@types/codemirror": "0.0.46",
