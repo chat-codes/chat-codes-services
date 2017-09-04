@@ -27,6 +27,12 @@ class ChatCodesSocketIOServer {
                 });
                 console.log(`Client (${id}) asked if ${roomName} is available`);
             });
+            socket.on('ping', function (data, callback) {
+                callback('pong', {
+                    success: true,
+                    received: data
+                });
+            });
             console.log(`Client connected (id: ${id})`);
         });
         console.log(`Created server on port ${port}`);

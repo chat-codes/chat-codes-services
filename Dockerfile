@@ -7,7 +7,7 @@ RUN apt-get install -y build-essential curl
 RUN curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
 RUN apt-get install -y nodejs
 
-ADD . /app
+ADD ./built/server /app
 
 # Install Node modules
 RUN cd /app; npm install .
@@ -16,4 +16,4 @@ RUN cd /app; npm install .
 EXPOSE 3000
 
 # Start app
-CMD ["nodejs", "/app/built/socketio_server.js"]
+CMD ["nodejs", "/app/socketio_server.js"]
