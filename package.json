@@ -2,9 +2,9 @@
     "name": "chat-codes-services",
     "version": "1.0.0",
     "description": "",
-    "main": "built/server/socketio_server.js",
+    "main": "node built/server/socketio_server.js",
     "scripts": {
-        "start": "built/server/socketio_server.js -p 3000"
+        "start": "node built/server/socketio_server.js -p 3000"
     },
     "dependencies": {
         "@types/codemirror": "0.0.46",
