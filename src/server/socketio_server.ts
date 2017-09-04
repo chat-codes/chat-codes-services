@@ -93,7 +93,7 @@ export class ChatCodesSocketIOServer {
 }
 
 const optionDefinitions = [
-	{ name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: 3000}
+	{ name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env.PORT || 3000}
 ];
 const options = commandLineArgs(optionDefinitions);
 
