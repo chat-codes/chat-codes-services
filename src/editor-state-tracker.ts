@@ -496,7 +496,6 @@ export class EditorState {
 	private handleDelta(delta:UndoableDelta, mustPerformChange:boolean):void {
 		const oldDeltaPointer:number = this.deltaPointer;
 
-
 		//Go back and undo any deltas that should have been done after this delta
 		const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(delta.getTimestamp());
 
@@ -506,7 +505,6 @@ export class EditorState {
 			this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
 		}
 		// Go forward and do all of the deltas that come after.
-		this.moveDeltaPointer(oldDeltaPointer+1);
 		this.updateDeltaPointer();
 	}
 	public removeUserCursors(user) {
@@ -609,7 +607,7 @@ export class EditorStateTracker extends EventEmitter {
 	}
 	public focus(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):boolean {
 		this.setCurrentTimestamp(timestamp, extraInfo);
-		
+
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
 			return editorState.focus(range, extraInfo);
