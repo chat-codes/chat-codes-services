@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const pusher_communication_layer_1 = require("./pusher-communication-layer");
@@ -75,6 +74,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commService = commService;
         this.channelName = channelName;
         this.userList = new chat_user_1.ChatUserList(); // A list of chat userList
+        this._isRoot = false;
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new chat_messages_1.MessageGroups(this.userList, this.editorStateTracker);
         this.commLayer = commService.commLayer; // Pop this object up a level
@@ -191,6 +191,9 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         });
         // Add every current member to the user list
         this.commLayer.getMembers(this.channelName).then((memberInfo) => {
+            if (_.keys(memberInfo.members).length === 1) {
+                this._isRoot = true;
+            }
             this.myID = memberInfo.myID;
             this.userList.addAll(memberInfo);
             this.commLayer.trigger(this.channelName, 'request-history', this.myID);
@@ -207,7 +210,8 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         });
     }
     isRoot() {
-        return this.commService.isRoot;
+        return this._isRoot;
+        // return this.commService.isRoot;
     }
     /**
      * A promise that resolves when the communication channel is ready
@@ -235,6 +239,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
             timestamp: this.getTimestamp()
         }, data));
+        this.emit('editor-opened', data);
     }
     /**
      * Send chat message
@@ -362,8 +367,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
 exports.ChannelCommunicationService = ChannelCommunicationService;
 /* A class to create and manage ChannelCommunicationService instances */
 class CommunicationService {
-    constructor(isRoot, authInfo, EditorWrapperClass) {
-        this.isRoot = isRoot;
+    constructor(authInfo, EditorWrapperClass) {
         this.EditorWrapperClass = EditorWrapperClass;
         this.clients = {}; // Maps channel names to channel comms
         if (USE_PUSHER) {

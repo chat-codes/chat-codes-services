@@ -76,7 +76,7 @@ export class ChannelCommunicationService extends EventEmitter {
     public commLayer:CommunicationLayer; // The communication channel
     public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
-    private _isRoot:boolean;
+    private _isRoot:boolean=false;
 
     /**
      * [constructor description]
@@ -216,6 +216,9 @@ export class ChannelCommunicationService extends EventEmitter {
 
         // Add every current member to the user list
         this.commLayer.getMembers(this.channelName).then((memberInfo:any) => {
+            if(_.keys(memberInfo.members).length === 1) { // I'm the only one here
+                this._isRoot = true;
+            }
             this.myID = memberInfo.myID;
             this.userList.addAll(memberInfo);
             this.commLayer.trigger(this.channelName, 'request-history', this.myID);
@@ -233,7 +236,8 @@ export class ChannelCommunicationService extends EventEmitter {
         });
     }
     private isRoot():boolean {
-        return this.commService.isRoot;
+        return this._isRoot;
+        // return this.commService.isRoot;
     }
 
     /**
@@ -264,6 +268,7 @@ export class ChannelCommunicationService extends EventEmitter {
         this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
             timestamp: this.getTimestamp()
         }, data));
+        (this as any).emit('editor-opened', data);
     }
 
     /**
@@ -405,7 +410,7 @@ export class ChannelCommunicationService extends EventEmitter {
 
 /* A class to create and manage ChannelCommunicationService instances */
 export class CommunicationService {
-    constructor(public isRoot:boolean, authInfo, private EditorWrapperClass) {
+    constructor(authInfo, private EditorWrapperClass) {
         if(USE_PUSHER) {
             this.commLayer = new PusherCommunicationLayer(authInfo);
         } else {

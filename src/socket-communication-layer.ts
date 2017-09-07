@@ -9,7 +9,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 	private username:string;
 	constructor(private authInfo) {
 		this.username = authInfo.username;
-		this.manager = new Promise((resolve, reject) => {
+		this.manager = new Promise<SocketIOClient.Manager>((resolve, reject) => {
 			resolve(new Manager(`http://${authInfo.host}:${authInfo.port}`));
 		});
 		this.mainSocket = this.manager.then((manager) => {
@@ -30,7 +30,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 				return this.manager;
 			}).then((manager) => {
 				const socket = manager.socket(`/${name}`);
-				return new Promise((resolve, reject) => {
+				return new Promise<SocketIOClient.Socket>((resolve, reject) => {
 					socket.on('connect', (event) => {
 						socket.emit('set-username', this.username, () => {
 							resolve(socket);
@@ -66,12 +66,12 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 	};
 	public channelNameAvailable(channelName:string):Promise<boolean> {
 		return this.mainSocket.then((socket) => {
-			return new Promise((resolve, reject) => {
+			return new Promise<boolean>((resolve, reject) => {
 				socket.emit('channel-available', channelName, (available:boolean) => {
 					resolve(available);
 				});
 			});
-		}) as Promise<boolean>;
+		});
 	};
 	public onMemberAdded(channelName:string, callback:(event)=>any):void {
 		this.getNamespace(channelName).then((room) => {

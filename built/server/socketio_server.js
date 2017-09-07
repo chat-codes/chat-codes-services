@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -96,7 +95,7 @@ class ChatCodesSocketIOServer {
 }
 exports.ChatCodesSocketIOServer = ChatCodesSocketIOServer;
 const optionDefinitions = [
-    { name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env.PORT || 3000 }
+    { name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000 }
 ];
 const options = commandLineArgs(optionDefinitions);
 const server = new ChatCodesSocketIOServer(options.port);

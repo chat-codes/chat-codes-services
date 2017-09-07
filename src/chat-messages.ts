@@ -3,7 +3,6 @@ import { ChatUser, ChatUserList } from './chat-user';
 import { EditorStateTracker, UndoableDelta, EditDelta, EditorState } from './editor-state-tracker';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
-import * as jsdiff from 'diff';
 import * as difflib from 'difflib';
 
 function tstamp(x:number|Timestamped):number {
