@@ -76,6 +76,7 @@ export class ChannelCommunicationService extends EventEmitter {
     public commLayer:CommunicationLayer; // The communication channel
     public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
+    private _isRoot:boolean;
 
     /**
      * [constructor description]

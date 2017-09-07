@@ -487,7 +487,6 @@ class EditorState {
             this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
         }
         // Go forward and do all of the deltas that come after.
-        this.moveDeltaPointer(oldDeltaPointer + 1);
         this.updateDeltaPointer();
     }
     removeUserCursors(user) {
