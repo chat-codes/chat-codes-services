@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");

@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
@@ -480,10 +481,15 @@ class EditorState {
         const oldDeltaPointer = this.deltaPointer;
         //Go back and undo any deltas that should have been done after this delta
         const lastDeltaBefore = this.getLastDeltaIndexBeforeTimestamp(delta.getTimestamp());
-        this.moveDeltaPointer(lastDeltaBefore);
-        this.deltas.splice(this.deltaPointer + 1, 0, delta);
-        if (mustPerformChange === false) {
-            this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
+        if (oldDeltaPointer < 0 || oldDeltaPointer >= lastDeltaBefore) {
+            this.moveDeltaPointer(lastDeltaBefore);
+            this.deltas.splice(this.deltaPointer + 1, 0, delta);
+            if (mustPerformChange === false) {
+                this.deltaPointer = this.deltaPointer + 1; // will not include this delta as we move forward
+            }
+        }
+        else {
+            this.deltas.splice(lastDeltaBefore + 1, 0, delta);
         }
         // Go forward and do all of the deltas that come after.
         this.updateDeltaPointer();
