@@ -1,12 +1,41 @@
 import * as sio from 'socket.io';
 import * as _ from 'underscore';
 import * as commandLineArgs from 'command-line-args';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as warehouse from 'warehousejs';
+import * as SqlBackend from 'warehousejs/backend/sql';
+
+function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):Promise<any> {
+	return new Promise((resolve, reject) => {
+		fs.readFile(filename, 'utf-8', (err, contents) => {
+			if(err) { reject(err); }
+			resolve(contents);
+		});
+	}).then((contents:string) => {
+		return JSON.parse(contents);
+	});
+}
 
 export class ChatCodesSocketIOServer {
 	private io:SocketIO.Server;
 	private namespaces:{[ns:string]: SocketIO.Namespace} = {};
-	private members:{[id:string]:any} = {};;
+	private members:{[id:string]:any} = {};
+	private backendPromise:Promise<any>;
 	constructor(private port:number) {
+		this.backendPromise = getCredentials().then((creds) => {
+			const warehouseOptions = {
+				driver: 'pg',
+				host: creds.host,
+				port: creds.port,
+				database: creds.database,
+				user: creds.user,
+				password: creds.password
+			};
+			const backend = new SqlBackend(warehouseOptions);
+			return backend;
+		});
+
 		this.io = sio(this.port);
 		this.io.on('connection', (socket:SocketIO.Socket) => {
 			const {id} = socket;
@@ -51,32 +80,53 @@ export class ChatCodesSocketIOServer {
 
 				s.on('set-username', (username:string, callback) => {
 					member.info.name = username;
-					callback();
 
+					this.backendPromise.then((backend) => {
+						const memberStore = backend.objectStore('users');
+						memberStore.add({id: id, channel: name,  name: username});
+
+						const connectionStore = backend.objectStore('connections');
+						connectionStore.add({id: id, channel: name, event: 'connect', timestamp: (new Date()).getTime() });
+
+						const channelsStore = backend.objectStore('channels');
+						connectionStore.add({ channel: name, timestamp: (new Date()).getTime() });
+					});
+
+					callback();
 					s.broadcast.emit('member-added', member);
 					console.log(`Client (${id} in ${name}) set username to ${username}`);
 				});
 
 				s.on('data', (eventName:string, payload:any) => {
+					this.backendPromise.then((backend) => {
+						const dataStore = backend.objectStore('data');
+						console.log(dataStore);
+						dataStore.add({user_id: id, event: eventName, data: JSON.stringify(payload)}).then(function(result) { console.log(result); })
+     .fail(function(error) { console.log(error); });;
+					});
 					s.broadcast.emit(`data-${eventName}`, payload);
 				});
 				s.on('disconnect', () => {
+					Promise.all([this.backendPromise, this.getMembers(name)]).then((result) => {
+						const backend = result[0];
+						const members = result[1];
+
+						const connectionStore = backend.objectStore('connections');
+						connectionStore.add({id: id, event: 'disconnect', timestamp: (new Date()).getTime() });
+					});
+
 					s.broadcast.emit('member-removed', member);
 					console.log(`Client (${id} in ${name}) disconnected`);
 				});
 
 				s.on('get-members', (callback) => {
-					ns.clients((err, clients) => {
-						if(err) { console.error(err); }
-						const result = {};
-						_.each(clients, (id:string) => {
-							result[id] = this.members[id].info;
-						});
+					this.getMembers(name).then((members) => {
+						const ids = _.keys(members);
 						callback({
 							me: member,
 							myID: s.id,
-							members: result,
-							count: clients.length
+							members: members,
+							count: ids.length
 						});
 					});
 					console.log(`Client (${id} in ${name}) requested members`);
@@ -86,6 +136,19 @@ export class ChatCodesSocketIOServer {
 			this.namespaces[name] = ns;
 			return this.namespaces[name];
 		}
+	}
+	private getMembers(channelName:string):Promise<any> {
+		const ns = this.getNamespace(channelName);
+		return new Promise<any>((resolve, reject) => {
+			ns.clients((err, clients) => {
+				if(err) { console.error(err); }
+				const result = {};
+				_.each(clients, (id:string) => {
+					result[id] = this.members[id].info;
+				});
+				resolve(result);
+			});
+		});
 	}
 	destroy():void {
 		this.io.close();
