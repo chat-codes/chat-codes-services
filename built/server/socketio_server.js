@@ -53,11 +53,7 @@ class ChatCodesSocketIOServer {
         };
         this.clientPromise = getCredentials().then((creds) => {
             const client = new pg.Client({
-                host: creds.host,
-                port: creds.port,
-                database: creds.database,
-                user: creds.user,
-                password: creds.password
+                connectionString: creds
             });
             return client.connect().then(() => { return client; });
         }).then((client) => {
@@ -100,6 +96,14 @@ class ChatCodesSocketIOServer {
         return this.namespaces[name];
     }
     ;
+    shouldLogData(eventType, data) {
+        if (eventType === 'typing' || eventType === 'cursor-event') {
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
     createNamespace(name) {
         const ns = this.io.of(`/${name}`);
         const dbChannelID = this.clientPromise.then((client) => {
@@ -147,12 +151,13 @@ class ChatCodesSocketIOServer {
                 console.log(`Client (${id} in ${name}) set username to ${username}`);
             });
             s.on('data', (eventName, payload) => {
-                const { type } = payload;
-                Promise.all([dbChannelID, this.clientPromise]).then((result) => {
-                    const channelID = result[0];
-                    const client = result[1];
-                    return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
-                });
+                if (this.shouldLogData(eventName, payload)) {
+                    Promise.all([dbChannelID, this.clientPromise]).then((result) => {
+                        const channelID = result[0];
+                        const client = result[1];
+                        return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
+                    });
+                }
                 s.broadcast.emit(`data-${eventName}`, payload);
             });
             s.on('disconnect', () => {
