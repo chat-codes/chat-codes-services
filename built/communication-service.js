@@ -87,32 +87,34 @@ class ChannelCommunicationService extends events_1.EventEmitter {
                 sender: this.userList.getUser(data.uid)
             }, data));
         });
-        this.commLayer.bind(this.channelName, 'history', (data) => {
-            if (data.forUser === this.myID) {
-                const { editorState, allUsers, messageHistory } = data;
-                // Add every user from the past to our list
-                allUsers.forEach((u) => {
-                    this.userList.add(false, u.id, u.name, u.active);
-                });
-                _.each(editorState, (serializedEditorState) => {
-                    const editorState = this.editorStateTracker.onEditorOpened(serializedEditorState, true);
-                    _.each(editorState.getDeltas(), (delta) => {
-                        this.messageGroups.addDelta(delta);
-                    });
-                });
-                this.emit('editor-state', data);
-                _.each(messageHistory, (m) => {
-                    this.messageGroups.addTextMessage(m);
-                    this.emit('message', _.extend({
-                        sender: this.userList.getUser(m.uid)
-                    }, m));
-                });
-                this.emit('history', {
-                    userList: this.userList,
-                    editorState: this.editorStateTracker
-                });
-            }
-        });
+        // this.commLayer.bind(this.channelName, 'history', (data) => {
+        //     if(data.forUser === this.myID) {
+        //         const {editorState, allUsers, messageHistory} = data;
+        //         // Add every user from the past to our list
+        //         allUsers.forEach((u) => {
+        //             this.userList.add(false, u.id, u.name, u.active);
+        //         });
+        //
+        //         _.each(editorState, (serializedEditorState) => {
+        //             const editorState:EditorState = this.editorStateTracker.onEditorOpened(serializedEditorState, true);
+        //             _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
+        //                 this.messageGroups.addDelta(delta);
+        //             });
+        //         });
+        //         (this as any).emit('editor-state', data);
+        //
+        //         _.each(messageHistory, (m:any) => {
+        //             this.messageGroups.addTextMessage(m);
+        //             (this as any).emit('message', _.extend({
+        //                 sender: this.userList.getUser(m.uid)
+        //             }, m));
+        //         });
+        //         (this as any).emit('history', {
+        //             userList: this.userList,
+        //             editorState: this.editorStateTracker
+        //         });
+        //     }
+        // });
         // Track when users are typing
         this.commLayer.bind(this.channelName, 'typing', (data) => {
             const { uid, status } = data;
@@ -179,26 +181,26 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             this.emit('terminal-data', event);
         });
         // Someone requested the conversation & editor history
-        this.commLayer.bind(this.channelName, 'request-history', (memberID) => {
-            // If I'm root, then send over the current editor state and past message history to every new user
-            if (this.isRoot()) {
-                this.commLayer.trigger(this.channelName, 'history', {
-                    forUser: memberID,
-                    editorState: this.editorStateTracker.serializeEditorStates(),
-                    allUsers: this.userList.serialize(),
-                    messageHistory: this.messageGroups.getMessageHistory()
-                });
-            }
-        });
+        // this.commLayer.bind(this.channelName, 'request-history', (memberID:string) => {
+        //     // If I'm root, then send over the current editor state and past message history to every new user
+        //     if(this.isRoot()) {
+        //         this.commLayer.trigger(this.channelName, 'history', {
+        //             forUser: memberID,
+        //             editorState: this.editorStateTracker.serializeEditorStates(),
+        //             allUsers: this.userList.serialize(),
+        //             messageHistory: this.messageGroups.getMessageHistory()
+        //         });
+        //     }
+        // });
         // Add every current member to the user list
-        this.commLayer.getMembers(this.channelName).then((memberInfo) => {
-            if (_.keys(memberInfo.members).length === 1) {
-                this._isRoot = true;
-            }
-            this.myID = memberInfo.myID;
-            this.userList.addAll(memberInfo);
-            this.commLayer.trigger(this.channelName, 'request-history', this.myID);
-        });
+        // this.commLayer.getMembers(this.channelName).then((memberInfo:any) => {
+        //     if(_.keys(memberInfo.members).length === 1) { // I'm the only one here
+        //         this._isRoot = true;
+        //     }
+        //     this.myID = memberInfo.myID;
+        //     this.userList.addAll(memberInfo);
+        //     this.commLayer.trigger(this.channelName, 'request-history', this.myID);
+        // });
         // Add anyone who subsequently joines
         this.commLayer.onMemberAdded(this.channelName, (member) => {
             const memberID = member.id;
@@ -208,6 +210,20 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commLayer.onMemberRemoved(this.channelName, (member) => {
             this.editorStateTracker.removeUserCursors(member);
             this.userList.remove(member.id);
+        });
+        this.commLayer.channelReady(this.channelName).then((history) => {
+            const { myID, data, users } = history;
+            this.myID = myID;
+            _.each(users, (u) => {
+                this.userList.add(u.id === myID, u.id, u.name, u.active);
+            });
+            if (users.length === 1) {
+                this._isRoot = true;
+            }
+            _.each(data, (h) => {
+                const { eventName, payload } = h;
+                this.commLayer.reTrigger(this.channelName, eventName, payload);
+            });
         });
     }
     isRoot() {

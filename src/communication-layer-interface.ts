@@ -6,5 +6,6 @@ export interface CommunicationLayer {
 	onMemberAdded(channelName:string, callback:(event)=>any):void;
 	onMemberRemoved(channelName:string, callback:(event)=>any);
 	channelReady(channelName:string):Promise<any>;
+	reTrigger(channelName:string, eventName:string, payload):void;
 	destroy():void;
 }

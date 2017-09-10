@@ -14,11 +14,12 @@ class SocketIOCommunicationLayer {
             return manager.socket('/');
         });
     }
-    getNamespace(name) {
+    getNamespaceAndHistory(name) {
         if (_.has(this.namespaces, name)) {
             return this.namespaces[name];
         }
         else {
+            let socket;
             this.namespaces[name] = this.mainSocket.then((socket) => {
                 return new Promise((resolve, reject) => {
                     socket.emit('request-join-room', name, (response) => {
@@ -28,21 +29,30 @@ class SocketIOCommunicationLayer {
             }).then(() => {
                 return this.manager;
             }).then((manager) => {
-                const socket = manager.socket(`/${name}`);
+                socket = manager.socket(`/${name}`);
                 return new Promise((resolve, reject) => {
                     socket.on('connect', (event) => {
-                        socket.emit('set-username', this.username, () => {
-                            resolve(socket);
+                        socket.emit('set-username', this.username, (history) => {
+                            resolve(history);
                         });
                     });
                 });
-            }).then((socket) => {
-                return socket;
+            }).then((history) => {
+                return {
+                    history: history,
+                    socket: socket,
+                    listeners: {}
+                };
             });
             return this.namespaces[name];
         }
     }
     ;
+    getNamespace(name) {
+        return this.getNamespaceAndHistory(name).then((data) => {
+            return data.socket;
+        });
+    }
     trigger(channelName, eventName, eventContents) {
         this.getNamespace(channelName).then((room) => {
             room.emit('data', eventName, eventContents);
@@ -50,10 +60,18 @@ class SocketIOCommunicationLayer {
     }
     ;
     bind(channelName, eventName, callback) {
-        this.getNamespace(channelName).then((room) => {
-            room.on(`data-${eventName}`, (val) => {
-                callback(val);
-            });
+        this.getNamespaceAndHistory(channelName).then((data) => {
+            const { socket, listeners } = data;
+            if (_.has(listeners, eventName)) {
+                listeners[eventName].push(callback);
+            }
+            else {
+                listeners[eventName] = [callback];
+            }
+            socket.on(`data-${eventName}`, callback);
+            // (val) => {
+            // 	callback(val);
+            // });
         });
     }
     ;
@@ -94,7 +112,9 @@ class SocketIOCommunicationLayer {
     }
     ;
     channelReady(channelName) {
-        return this.getNamespace(channelName);
+        return this.getNamespaceAndHistory(channelName).then((data) => {
+            return data.history;
+        });
     }
     ;
     destroy() {
@@ -102,6 +122,14 @@ class SocketIOCommunicationLayer {
         // });
     }
     ;
+    reTrigger(channelName, eventName, payload) {
+        this.getNamespaceAndHistory(channelName).then((data) => {
+            const { listeners } = data;
+            _.each(listeners[eventName], (callback) => {
+                callback(payload);
+            });
+        });
+    }
 }
 exports.SocketIOCommunicationLayer = SocketIOCommunicationLayer;
 //# sourceMappingURL=socket-communication-layer.js.map

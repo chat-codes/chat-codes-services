@@ -389,4 +389,7 @@ export class PusherCommunicationLayer implements CommunicationLayer {
 	public destroy():void {
 		this.pusher.disconnect();
 	}
+	public reTrigger(channelName:string, eventName:string, payload):void {
+
+	}
 }

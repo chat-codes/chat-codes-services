@@ -366,6 +366,8 @@ class PusherCommunicationLayer {
     destroy() {
         this.pusher.disconnect();
     }
+    reTrigger(channelName, eventName, payload) {
+    }
 }
 exports.PusherCommunicationLayer = PusherCommunicationLayer;
 //# sourceMappingURL=pusher-communication-layer.js.map

@@ -5,7 +5,7 @@ import * as _ from 'underscore';
 export class SocketIOCommunicationLayer implements CommunicationLayer {
 	private manager:Promise<SocketIOClient.Manager>;
 	private mainSocket:Promise<SocketIOClient.Socket>;
-	private namespaces:{[name:string]:Promise<SocketIOClient.Socket>} = {};
+	private namespaces:{[name:string]:any} = {};
 	private username:string;
 	constructor(private authInfo) {
 		this.username = authInfo.username;
@@ -16,10 +16,11 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			return manager.socket('/');
 		});
 	}
-	private getNamespace(name:string):Promise<SocketIOClient.Socket> {
+	private getNamespaceAndHistory(name:string):Promise<any> {
 		if(_.has(this.namespaces, name)) {
 			return this.namespaces[name];
 		} else {
+			let socket:SocketIOClient.Socket;
 			this.namespaces[name] = this.mainSocket.then((socket) => {
 				return new Promise((resolve, reject) => {
 					socket.emit('request-join-room', name, (response) => {
@@ -29,30 +30,49 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			}).then(() => {
 				return this.manager;
 			}).then((manager) => {
-				const socket = manager.socket(`/${name}`);
+				socket = manager.socket(`/${name}`);
 				return new Promise<SocketIOClient.Socket>((resolve, reject) => {
 					socket.on('connect', (event) => {
-						socket.emit('set-username', this.username, () => {
-							resolve(socket);
+						socket.emit('set-username', this.username, (history) => {
+							resolve(history);
 						});
 					});
 				});
-			}).then((socket:SocketIOClient.Socket) => {
-				return socket;
+			}).then((history) => {
+				return {
+					history: history,
+					socket: socket,
+					listeners: {
+
+					}
+				};
 			});
 			return this.namespaces[name];
 		}
 	};
+	private getNamespace(name:string):Promise<SocketIOClient.Socket> {
+		return this.getNamespaceAndHistory(name).then((data) => {
+			return data.socket;
+		});
+	}
 	public trigger(channelName:string, eventName:string, eventContents:any):void {
 		this.getNamespace(channelName).then((room) => {
 			room.emit('data', eventName, eventContents);
 		});
 	};
 	public bind(channelName:string, eventName:string, callback:(any)=>any):void {
-		this.getNamespace(channelName).then((room) => {
-			room.on(`data-${eventName}`, (val) => {
-				callback(val);
-			});
+		this.getNamespaceAndHistory(channelName).then((data) => {
+			const {socket, listeners} = data;
+			if(_.has(listeners, eventName)) {
+				listeners[eventName].push(callback);
+			} else {
+				listeners[eventName] = [callback];
+			}
+
+			socket.on(`data-${eventName}`, callback);
+			// (val) => {
+			// 	callback(val);
+			// });
 		});
 	};
 	public getMembers(channelName:string):Promise<any> {
@@ -88,10 +108,20 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		});
 	};
 	public channelReady(channelName:string):Promise<any> {
-		return this.getNamespace(channelName);
+		return this.getNamespaceAndHistory(channelName).then((data) => {
+			return data.history;
+		});
 	};
 	public destroy():void {
 		// this.manager.then((manager) => {
 		// });
 	};
+	public reTrigger(channelName:string, eventName:string, payload):void {
+		this.getNamespaceAndHistory(channelName).then((data) => {
+			const {listeners} = data;
+			_.each(listeners[eventName], (callback:any) => {
+				callback(payload);
+			})
+		});
+	}
 }
