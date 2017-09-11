@@ -303,7 +303,7 @@ export class ChatCodesSocketIOServer {
 
 const optionDefinitions = [
 	{ name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000},
-	{ name: 'dburl', alias: 'd', type: String, defaultOption: true, defaultValue: process.env['DATABASE_URL']||false }
+	{ name: 'dburl', alias: 'd', type: String, defaultValue: process.env['DATABASE_URL']||false }
 ];
 const options = commandLineArgs(optionDefinitions);
 
