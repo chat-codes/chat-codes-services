@@ -7,7 +7,7 @@ import * as pg from 'pg';
 
 pg.defaults.ssl = true;
 
-function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):Promise<any> {
+function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):Promise<string> {
 	return new Promise((resolve, reject) => {
 		fs.readFile(filename, 'utf-8', (err, contents) => {
 			if(err) { reject(err); }
@@ -23,10 +23,16 @@ export class ChatCodesSocketIOServer {
 	private namespaces:{[ns:string]: SocketIO.Namespace} = {};
 	private members:{[id:string]:any} = {};
 	private clientPromise:Promise<pg.Client>;
-	constructor(private port:number) {
-		this.clientPromise = getCredentials().then((creds) => {
+	constructor(private port:number, dbURL:string) {
+		let urlPromise:Promise<string>;
+		if(dbURL) {
+			urlPromise = Promise.resolve(dbURL);
+		} else {
+			urlPromise = getCredentials();
+		}
+		this.clientPromise = urlPromise.then((dbURL) => {
 			const client = new pg.Client({
-				connectionString: creds
+				connectionString: dbURL
 			});
 			return client.connect().then(() => { return client; });
 		}).then((client) => {
@@ -296,8 +302,9 @@ export class ChatCodesSocketIOServer {
 }
 
 const optionDefinitions = [
-	{ name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000}
+	{ name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000},
+	{ name: 'dburl', alias: 'd', type: String, defaultOption: true, defaultValue: process.env['DATABASE_URL']||false }
 ];
 const options = commandLineArgs(optionDefinitions);
 
-const server = new ChatCodesSocketIOServer(options.port);
+const server = new ChatCodesSocketIOServer(options.port, options.dburl);

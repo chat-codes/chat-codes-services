@@ -20,7 +20,7 @@ function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
     });
 }
 class ChatCodesSocketIOServer {
-    constructor(port) {
+    constructor(port, dbURL) {
         this.port = port;
         this.namespaces = {};
         this.members = {};
@@ -51,9 +51,16 @@ class ChatCodesSocketIOServer {
                 'data TEXT'
             ]
         };
-        this.clientPromise = getCredentials().then((creds) => {
+        let urlPromise;
+        if (dbURL) {
+            urlPromise = Promise.resolve(dbURL);
+        }
+        else {
+            urlPromise = getCredentials();
+        }
+        this.clientPromise = urlPromise.then((dbURL) => {
             const client = new pg.Client({
-                connectionString: creds
+                connectionString: dbURL
             });
             return client.connect().then(() => { return client; });
         }).then((client) => {
@@ -292,8 +299,9 @@ class ChatCodesSocketIOServer {
 }
 exports.ChatCodesSocketIOServer = ChatCodesSocketIOServer;
 const optionDefinitions = [
-    { name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000 }
+    { name: 'port', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000 },
+    { name: 'dburl', alias: 'd', type: String, defaultOption: true, defaultValue: process.env['DATABASE_URL'] || false }
 ];
 const options = commandLineArgs(optionDefinitions);
-const server = new ChatCodesSocketIOServer(options.port);
+const server = new ChatCodesSocketIOServer(options.port, options.dburl);
 //# sourceMappingURL=socketio_server.js.map
