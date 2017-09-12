@@ -32,6 +32,26 @@ function reverseArr(input) {
     }
     return ret;
 }
+var ConnectionAction;
+(function (ConnectionAction) {
+    ConnectionAction[ConnectionAction["connect"] = 1] = "connect";
+    ConnectionAction[ConnectionAction["disconnect"] = 2] = "disconnect";
+})(ConnectionAction || (ConnectionAction = {}));
+;
+class ConnectionMessage {
+    constructor(user, timestamp, action) {
+        this.user = user;
+        this.timestamp = timestamp;
+        this.action = action;
+    }
+    getUser() { return this.user; }
+    ;
+    getTimestamp() { return this.timestamp; }
+    ;
+    isConnect() { return this.action === ConnectionAction.connect; }
+    isDisconnect() { return this.action !== ConnectionAction.connect; }
+}
+exports.ConnectionMessage = ConnectionMessage;
 class TextMessage {
     constructor(sender, timestamp, message, editorStateTracker) {
         this.sender = sender;
@@ -273,6 +293,25 @@ class TextMessageGroup extends Group {
 }
 exports.TextMessageGroup = TextMessageGroup;
 ;
+class ConnectionMessageGroup extends Group {
+    isConnect() { return this.getEarliestItem().isConnect(); }
+    isDisconnect() { return this.getEarliestItem().isDisconnect(); }
+    compatibleWith(item) {
+        return (item instanceof ConnectionMessage) && (this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect());
+        ;
+    }
+    ;
+    constructNew(items) {
+        return new ConnectionMessageGroup(items);
+    }
+    ;
+    getUsers() {
+        const users = this.getItems().map(cm => cm.getUser());
+        return _.unique(users);
+    }
+}
+exports.ConnectionMessageGroup = ConnectionMessageGroup;
+;
 /*
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
@@ -291,7 +330,8 @@ class MessageGroups extends events_1.EventEmitter {
     }
     typeMatches(item, group) {
         return (group instanceof EditGroup && item instanceof editor_state_tracker_1.EditDelta) ||
-            (group instanceof TextMessageGroup && item instanceof TextMessage);
+            (group instanceof TextMessageGroup && item instanceof TextMessage) ||
+            (group instanceof ConnectionMessageGroup && item instanceof ConnectionMessage);
     }
     addItem(item) {
         const itemTimestamp = item.getTimestamp();
@@ -337,6 +377,9 @@ class MessageGroups extends events_1.EventEmitter {
             if (item instanceof TextMessage) {
                 group = new TextMessageGroup([item]);
             }
+            else if (item instanceof ConnectionMessage) {
+                group = new ConnectionMessageGroup([item]);
+            }
             else {
                 group = new EditGroup([item]);
             }
@@ -365,6 +408,14 @@ class MessageGroups extends events_1.EventEmitter {
         const sender = this.chatUserList.getUser(data.uid);
         const message = new TextMessage(sender, data.timestamp, data.message, this.editorStateTracker);
         return this.addItem(message);
+    }
+    ;
+    addConnectionMessage(user, timestamp) {
+        this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.connect));
+    }
+    ;
+    addDisconnectionMessage(user, timestamp) {
+        this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.disconnect));
     }
     ;
     addDelta(delta) {

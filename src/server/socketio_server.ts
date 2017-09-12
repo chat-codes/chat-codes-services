@@ -65,6 +65,9 @@ export class ChatCodesSocketIOServer {
 					received: data
 				});
 			});
+			socket.on('disconnect', () => {
+				this.clusterIfEmptyForAWhile();
+			});
 			console.log(`Client connected (id: ${id})`)
 		});
 		console.log(`Created server on port ${port}`)
@@ -97,6 +100,8 @@ export class ChatCodesSocketIOServer {
 			let dbid:number;
 			const member = {
 				id: id,
+				joined: (new Date()).getTime(),
+				left: -1,
 				info: {
 					name: null
 				}
@@ -119,8 +124,8 @@ export class ChatCodesSocketIOServer {
 				}).then((id:number) => {
 					dbid = id;
 					console.log(`DB: ${username} connected`);
-					return client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, now(), $3::text)`, [
-							dbid, channelID, 'connect'
+					return client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, $3::timestamp, $4::text)`, [
+							dbid, channelID, new Date(member.joined), 'connect'
 					]);
 				}).then(() => {
 					return this.getChannelState(channelID);
@@ -146,14 +151,16 @@ export class ChatCodesSocketIOServer {
 				s.broadcast.emit(`data-${eventName}`, payload);
 			});
 			s.on('disconnect', () => {
+				member.left = (new Date()).getTime();
+
 				Promise.all([dbChannelID, this.clientPromise, this.getMembers(name)]).then((result) => {
 					const channelID:number = result[0];
 					const client:pg.Client = result[1];
 					const members = result[2];
 					console.log(`DB: ${member.info.name} disconnected`);
 					const queries = [
-						client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, now(), $3::text)`, [
-							dbid, channelID, 'disconnect'
+						client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, $3::timestamp, $4::text)`, [
+							dbid, channelID, new Date(member.left), 'disconnect'
 						])
 					];
 					if(members.length === 0) {
@@ -202,17 +209,75 @@ export class ChatCodesSocketIOServer {
 	private createTables(client):Promise<pg.Client> {
 		const tables = this.tables;
 		const queries = _.map(_.keys(tables), (tableName:string) => {
-			const params = (tables[tableName]).join(',\n\t');
-			return `CREATE TABLE IF NOT EXISTS ${tableName} (\n\t${params}\n);`;
+			const tableInfo = tables[tableName];
+			const params = (tableInfo.columns).join(',\n\t');
+
+			let q = client.query(`CREATE TABLE IF NOT EXISTS ${tableName} (\n\t${params}\n);`);
+
+			_.each(tableInfo.indicies, (idx, name) => {
+				q = q.then(client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${tableName} ${idx}`));
+			});
+			if(tableInfo.cluster) {
+				q = q.then(client.query(`CLUSTER ${tableName} USING ${tableInfo.cluster}`));
+			}
+			return q;
 		});
-		return Promise.all(_.map(queries, (q) => client.query(q) )).then(function() {
+		return Promise.all(queries).then(() => {
 			return client;
 		});
 	};
+	private cluster():Promise<any> {
+		return this.clientPromise.then((client) => {
+			return client.query(`CLUSTER`);
+		});
+	};
+
+	private nobodyThere():Promise<boolean> {
+		return new Promise<boolean>((resolve, reject) => {
+			if(_.keys(this.namespaces).length === 0) {
+				this.io.clients((err, clients) => {
+					if(err) { reject(err); }
+					else { resolve(clients.length === 0); }
+				});
+			} else {
+				resolve(false);
+			}
+		});
+	};
+	private clusterCheck:Promise<any> = null;
+	private clusterIfEmptyForAWhile() {
+		if(!this.clusterCheck) {
+			this.clusterCheck = this.nobodyThere().then((isEmpty:boolean) => {
+				if(isEmpty) {
+					return this.wait(5);
+				} else {
+					return -1;
+				}
+			}).then((res) => {
+				if(res >= 0) {
+					return this.nobodyThere();
+				}
+				return false
+			}).then((stillEmpty:boolean) => {
+				if(stillEmpty) {
+					return this.cluster();
+				}
+			}).then(() => {
+				this.clusterCheck = null;
+			});
+		}
+	};
+	private wait(ms:number):Promise<number> {
+		return new Promise((resolve, reject) => {
+			setTimeout(() => {
+				resolve(ms);
+			}, ms);
+		});
+	}
+
 	private dropTables():Promise<pg.Client> {
 		const tables = this.tables;
 		const queries = _.map(_.keys(tables), (tableName:string) => {
-			const params = (tables[tableName]).join(',\n\t');
 			return `DROP TABLE IF EXISTS ${tableName} CASCADE;`;
 		});
 		return this.clientPromise.then((client) => {
@@ -257,10 +322,24 @@ export class ChatCodesSocketIOServer {
 				}),
 				users: _.map(_.keys(userMap), (id) => {
 					const {row, connections} = userMap[id];
+					let joined:number = -1;
+					let left:number = -1;
+					let active:boolean = true;
+					_.each(connections, (c:any) => {
+						const {action, time} = c;
+						if(action === 'disconnect') {
+							active = false;
+							left = time.getTime();
+						} else {
+							joined = time.getTime();
+						}
+					});
 					return {
 						id: row.uid,
 						name: row.name,
-						active: !_.some(connections, (c) => c['action']==='disconnect')
+						joined: joined,
+						left: left,
+						active: active
 					};
 				})
 			};
@@ -272,32 +351,55 @@ export class ChatCodesSocketIOServer {
 		});
 		this.io.close();
 	}
-	private tables:{[table:string]:Array<string>} = {
-		'channels': [
-			'id SERIAL PRIMARY KEY',
-			'created TIMESTAMP',
-			'destroyed TIMESTAMP',
-			'name TEXT NOT NULL'
-		],
-		'users': [
-			'id SERIAL PRIMARY KEY',
-			'uid TEXT NOT NULL',
-			'channel_id INTEGER REFERENCES channels(id)',
-			'name TEXT NOT NULL'
-		],
-		'user_connections': [
-			'user_id INTEGER REFERENCES users(id)',
-			'channel_id INTEGER REFERENCES channels(id)',
-			'time TIMESTAMP',
-			'action TEXT'
-		],
-		'channel_data': [
-			'user_id INTEGER REFERENCES users(id)',
-			'channel_id INTEGER REFERENCES channels(id)',
-			'time TIMESTAMP',
-			'event_name TEXT',
-			'data TEXT'
-		]
+	private tables:{[table:string]:any} = {
+		'channels': {
+			columns: [
+				'id SERIAL PRIMARY KEY',
+				'created TIMESTAMP',
+				'destroyed TIMESTAMP',
+				'name TEXT NOT NULL'
+			],
+			indicies: {
+			},
+			cluster: false
+		},
+		'users': {
+			columns: [
+				'id SERIAL PRIMARY KEY',
+				'uid TEXT NOT NULL',
+				'channel_id INTEGER REFERENCES channels(id)',
+				'name TEXT NOT NULL'
+			],
+			indicies: {
+				'user_channel': '(channel_id)'
+			},
+			cluster: 'user_channel'
+		},
+		'user_connections': {
+			columns: [
+				'user_id INTEGER REFERENCES users(id)',
+				'channel_id INTEGER REFERENCES channels(id)',
+				'time TIMESTAMP',
+				'action TEXT'
+			],
+			indicies: {
+				'channel_conn': '(channel_id)'
+			},
+			cluster: 'channel_conn'
+		},
+		'channel_data': {
+			columns: [
+				'user_id INTEGER REFERENCES users(id)',
+				'channel_id INTEGER REFERENCES channels(id)',
+				'time TIMESTAMP',
+				'event_name TEXT',
+				'data TEXT'
+			],
+			indicies: {
+				'channel_dat': '(channel_id)'
+			},
+			cluster: 'channel_dat'
+		}
 	};
 }
 

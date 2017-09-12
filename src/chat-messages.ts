@@ -33,6 +33,11 @@ function reverseArr(input) {
     return ret;
 }
 
+enum ConnectionAction {
+	connect = 1,
+	disconnect
+};
+
 export interface Timestamped {
 	getTimestamp():number;
 }
@@ -47,6 +52,14 @@ interface MessageGroup<Timestamped> {
 	occuredBeforeEQ(item:Timestamped|number);
 	occuredAfter(item:Timestamped|number);
 	occuredAfterEQ(item:Timestamped|number);
+}
+
+export class ConnectionMessage implements Timestamped {
+	constructor(private user:ChatUser, private timestamp:number, private action:ConnectionAction) { }
+	public getUser():ChatUser { return this.user; };
+	public getTimestamp():number { return this.timestamp; };
+	public isConnect():boolean { return this.action === ConnectionAction.connect; }
+	public isDisconnect():boolean { return this.action !== ConnectionAction.connect; }
 }
 
 export class TextMessage implements Timestamped {
@@ -267,6 +280,21 @@ export class TextMessageGroup extends Group<TextMessage> {
 	};
 };
 
+export class ConnectionMessageGroup extends Group<ConnectionMessage> {
+	public isConnect():boolean { return this.getEarliestItem().isConnect(); }
+	public isDisconnect():boolean { return this.getEarliestItem().isDisconnect(); }
+	public compatibleWith(item:any):boolean {
+		return (item instanceof ConnectionMessage) && (this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect()));
+	};
+	protected constructNew(items):ConnectionMessageGroup {
+		return new ConnectionMessageGroup(items);
+	};
+	public getUsers():Array<ChatUser> {
+		const users = this.getItems().map(cm => cm.getUser() )
+		return _.unique(users);
+	}
+};
+
 /*
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
@@ -275,7 +303,7 @@ export class MessageGroups extends EventEmitter {
 		super();
 	};
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
-	private messageGroups: Array<Group<TextMessage|UndoableDelta>> = [];
+	private messageGroups: Array<Group<TextMessage|UndoableDelta|ConnectionMessage>> = [];
 	private messages:Array<any> = [];
 
 	public getMessageHistory():Array<any> {
@@ -284,10 +312,11 @@ export class MessageGroups extends EventEmitter {
 
 	private typeMatches(item:Timestamped, group:Group<Timestamped>):boolean {
 		return (group instanceof EditGroup && item instanceof EditDelta) ||
-				(group instanceof TextMessageGroup && item instanceof TextMessage);
+				(group instanceof TextMessageGroup && item instanceof TextMessage) ||
+				(group instanceof ConnectionMessageGroup && item instanceof ConnectionMessage);
 	}
 
-	private addItem(item:UndoableDelta|TextMessage) {
+	private addItem(item:UndoableDelta|TextMessage|ConnectionMessage) {
 		const itemTimestamp = item.getTimestamp();
 		let insertedIntoExistingGroup:boolean = false;
 		let i = this.messageGroups.length-1
@@ -327,16 +356,18 @@ export class MessageGroups extends EventEmitter {
 
 		if(!insertedIntoExistingGroup) {
 			const insertionIndex = i+1;
-			let group:Group<UndoableDelta|TextMessage>;
+			let group:Group<UndoableDelta|TextMessage|ConnectionMessage>;
 			if(item instanceof TextMessage) {
 				group = new TextMessageGroup([item]);
+			} else if(item instanceof ConnectionMessage){
+				group = new ConnectionMessageGroup([item]);
 			} else {
 				group = new EditGroup([item]);
 			}
 			this.addGroup(group, insertionIndex);
 		}
 	}
-	private addGroup(group:Group<UndoableDelta|TextMessage>, insertionIndex:number) {
+	private addGroup(group:Group<UndoableDelta|TextMessage|ConnectionMessage>, insertionIndex:number) {
 		(this as any).emit('group-will-be-added', {
 			messageGroup: group,
 			insertionIndex: insertionIndex
@@ -359,6 +390,12 @@ export class MessageGroups extends EventEmitter {
 		const sender = this.chatUserList.getUser(data.uid);
 		const message:TextMessage = new TextMessage(sender, data.timestamp, data.message, this.editorStateTracker);
 		return this.addItem(message);
+	};
+	public addConnectionMessage(user:ChatUser, timestamp:number) {
+		this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.connect));
+	};
+	public addDisconnectionMessage(user:ChatUser, timestamp:number) {
+		this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.disconnect));
 	};
 	public addDelta(delta:UndoableDelta) {
 		if(delta instanceof EditDelta) {

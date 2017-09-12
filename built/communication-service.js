@@ -204,18 +204,25 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         // Add anyone who subsequently joines
         this.commLayer.onMemberAdded(this.channelName, (member) => {
             const memberID = member.id;
-            this.userList.add(false, memberID, member.info.name);
+            const user = this.userList.add(false, memberID, member.info.name, member.joined, member.left);
+            this.messageGroups.addConnectionMessage(user, user.getJoined());
         });
         //When a user leaves, remove them from the user list and remove their cursor
         this.commLayer.onMemberRemoved(this.channelName, (member) => {
             this.editorStateTracker.removeUserCursors(member);
-            this.userList.remove(member.id);
+            const user = this.userList.remove(member.id);
+            user.setLeft(member.left);
+            this.messageGroups.addDisconnectionMessage(user, user.getLeft());
         });
         this.commLayer.channelReady(this.channelName).then((history) => {
             const { myID, data, users } = history;
             this.myID = myID;
             _.each(users, (u) => {
-                this.userList.add(u.id === myID, u.id, u.name, u.active);
+                const user = this.userList.add(u.id === myID, u.id, u.name, u.joined, u.left, u.active);
+                this.messageGroups.addConnectionMessage(user, user.getJoined());
+                if (!user.isActive()) {
+                    this.messageGroups.addDisconnectionMessage(user, user.getLeft());
+                }
             });
             if (users.length === 1) {
                 this._isRoot = true;

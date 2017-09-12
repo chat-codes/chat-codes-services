@@ -14,12 +14,14 @@ class ChatUser extends events_1.EventEmitter {
      * @param  {boolean} active     Whether this user is currently in the channel
      * @param  {number}  colorIndex The user's color
      */
-    constructor(isMe, id, name, active, colorIndex) {
+    constructor(isMe, id, name, active, joined, left, colorIndex) {
         super();
         this.isMe = isMe;
         this.id = id;
         this.name = name;
         this.active = active;
+        this.joined = joined;
+        this.left = left;
         this.colorIndex = colorIndex;
         this.typingStatus = 'IDLE';
     }
@@ -34,6 +36,12 @@ class ChatUser extends events_1.EventEmitter {
     setIsActive(active) { this.active = active; }
     ;
     getTypingStatus() { return this.typingStatus; }
+    ;
+    setLeft(ts) { this.left = ts; }
+    ;
+    getLeft() { return this.left; }
+    ;
+    getJoined() { return this.joined; }
     ;
     setTypingStatus(status) {
         this.typingStatus = status;
@@ -62,18 +70,18 @@ class ChatUserList extends events_1.EventEmitter {
     getUsers() {
         return this.activeUsers;
     }
-    addAll(memberInfo) {
-        const myID = memberInfo.myID;
-        _.each(memberInfo.members, (memberInfo, id) => {
-            this.add(id === myID, id, memberInfo.name);
-        });
-    }
-    add(isMe, id, name, active = true) {
+    // public addAll(memberInfo):void {
+    //     const myID = memberInfo.myID;
+    //     _.each(memberInfo.members, (memberInfo:any, id:string) => {
+    //         this.add(id===myID, id, memberInfo.name);
+    //     });
+    // }
+    add(isMe, id, name, joined, left, active = true) {
         let user = this.getUser(id);
         if (user === null) {
             const colorIndex = isMe ? 1 : this.current_user_color;
             this.current_user_color = 2 + ((this.current_user_color + 1) % this.numColors);
-            user = new ChatUser(isMe, id, name, active, colorIndex);
+            user = new ChatUser(isMe, id, name, active, joined, left, colorIndex);
             if (active) {
                 this.activeUsers.push(user);
             }
@@ -93,16 +101,18 @@ class ChatUserList extends events_1.EventEmitter {
      */
     remove(id) {
         for (var i = 0; i < this.activeUsers.length; i++) {
-            var id_i = this.activeUsers[i].getID();
+            const user = this.activeUsers[i];
+            var id_i = user.getID();
             if (id_i === id) {
-                this.activeUsers[i].setIsActive(false);
+                user.setIsActive(false);
                 this.activeUsers.splice(i, 1);
                 this.emit('userRemoved', {
                     id: id
                 });
-                break;
+                return user;
             }
         }
+        return null;
     }
     getUser(id) {
         for (var i = 0; i < this.allUsers.length; i++) {

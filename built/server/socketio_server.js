@@ -24,32 +24,55 @@ class ChatCodesSocketIOServer {
         this.port = port;
         this.namespaces = {};
         this.members = {};
+        this.clusterCheck = null;
         this.tables = {
-            'channels': [
-                'id SERIAL PRIMARY KEY',
-                'created TIMESTAMP',
-                'destroyed TIMESTAMP',
-                'name TEXT NOT NULL'
-            ],
-            'users': [
-                'id SERIAL PRIMARY KEY',
-                'uid TEXT NOT NULL',
-                'channel_id INTEGER REFERENCES channels(id)',
-                'name TEXT NOT NULL'
-            ],
-            'user_connections': [
-                'user_id INTEGER REFERENCES users(id)',
-                'channel_id INTEGER REFERENCES channels(id)',
-                'time TIMESTAMP',
-                'action TEXT'
-            ],
-            'channel_data': [
-                'user_id INTEGER REFERENCES users(id)',
-                'channel_id INTEGER REFERENCES channels(id)',
-                'time TIMESTAMP',
-                'event_name TEXT',
-                'data TEXT'
-            ]
+            'channels': {
+                columns: [
+                    'id SERIAL PRIMARY KEY',
+                    'created TIMESTAMP',
+                    'destroyed TIMESTAMP',
+                    'name TEXT NOT NULL'
+                ],
+                indicies: {},
+                cluster: false
+            },
+            'users': {
+                columns: [
+                    'id SERIAL PRIMARY KEY',
+                    'uid TEXT NOT NULL',
+                    'channel_id INTEGER REFERENCES channels(id)',
+                    'name TEXT NOT NULL'
+                ],
+                indicies: {
+                    'user_channel': '(channel_id)'
+                },
+                cluster: 'user_channel'
+            },
+            'user_connections': {
+                columns: [
+                    'user_id INTEGER REFERENCES users(id)',
+                    'channel_id INTEGER REFERENCES channels(id)',
+                    'time TIMESTAMP',
+                    'action TEXT'
+                ],
+                indicies: {
+                    'channel_conn': '(channel_id)'
+                },
+                cluster: 'channel_conn'
+            },
+            'channel_data': {
+                columns: [
+                    'user_id INTEGER REFERENCES users(id)',
+                    'channel_id INTEGER REFERENCES channels(id)',
+                    'time TIMESTAMP',
+                    'event_name TEXT',
+                    'data TEXT'
+                ],
+                indicies: {
+                    'channel_dat': '(channel_id)'
+                },
+                cluster: 'channel_dat'
+            }
         };
         let urlPromise;
         if (dbURL) {
@@ -92,6 +115,9 @@ class ChatCodesSocketIOServer {
                     received: data
                 });
             });
+            socket.on('disconnect', () => {
+                this.clusterIfEmptyForAWhile();
+            });
             console.log(`Client connected (id: ${id})`);
         });
         console.log(`Created server on port ${port}`);
@@ -124,6 +150,8 @@ class ChatCodesSocketIOServer {
             let dbid;
             const member = {
                 id: id,
+                joined: (new Date()).getTime(),
+                left: -1,
                 info: {
                     name: null
                 }
@@ -143,8 +171,8 @@ class ChatCodesSocketIOServer {
                 }).then((id) => {
                     dbid = id;
                     console.log(`DB: ${username} connected`);
-                    return client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, now(), $3::text)`, [
-                        dbid, channelID, 'connect'
+                    return client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, $3::timestamp, $4::text)`, [
+                        dbid, channelID, new Date(member.joined), 'connect'
                     ]);
                 }).then(() => {
                     return this.getChannelState(channelID);
@@ -168,14 +196,15 @@ class ChatCodesSocketIOServer {
                 s.broadcast.emit(`data-${eventName}`, payload);
             });
             s.on('disconnect', () => {
+                member.left = (new Date()).getTime();
                 Promise.all([dbChannelID, this.clientPromise, this.getMembers(name)]).then((result) => {
                     const channelID = result[0];
                     const client = result[1];
                     const members = result[2];
                     console.log(`DB: ${member.info.name} disconnected`);
                     const queries = [
-                        client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, now(), $3::text)`, [
-                            dbid, channelID, 'disconnect'
+                        client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, $3::timestamp, $4::text)`, [
+                            dbid, channelID, new Date(member.left), 'disconnect'
                         ])
                     ];
                     if (members.length === 0) {
@@ -225,18 +254,80 @@ class ChatCodesSocketIOServer {
     createTables(client) {
         const tables = this.tables;
         const queries = _.map(_.keys(tables), (tableName) => {
-            const params = (tables[tableName]).join(',\n\t');
-            return `CREATE TABLE IF NOT EXISTS ${tableName} (\n\t${params}\n);`;
+            const tableInfo = tables[tableName];
+            const params = (tableInfo.columns).join(',\n\t');
+            let q = client.query(`CREATE TABLE IF NOT EXISTS ${tableName} (\n\t${params}\n);`);
+            _.each(tableInfo.indicies, (idx, name) => {
+                q = q.then(client.query(`CREATE INDEX IF NOT EXISTS ${name} ON ${tableName} ${idx}`));
+            });
+            if (tableInfo.cluster) {
+                q = q.then(client.query(`CLUSTER ${tableName} USING ${tableInfo.cluster}`));
+            }
+            return q;
         });
-        return Promise.all(_.map(queries, (q) => client.query(q))).then(function () {
+        return Promise.all(queries).then(() => {
             return client;
         });
     }
     ;
+    cluster() {
+        return this.clientPromise.then((client) => {
+            return client.query(`CLUSTER`);
+        });
+    }
+    ;
+    nobodyThere() {
+        return new Promise((resolve, reject) => {
+            if (_.keys(this.namespaces).length === 0) {
+                this.io.clients((err, clients) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(clients.length === 0);
+                    }
+                });
+            }
+            else {
+                resolve(false);
+            }
+        });
+    }
+    ;
+    clusterIfEmptyForAWhile() {
+        if (!this.clusterCheck) {
+            this.clusterCheck = this.nobodyThere().then((isEmpty) => {
+                if (isEmpty) {
+                    return this.wait(5);
+                }
+                else {
+                    return -1;
+                }
+            }).then((res) => {
+                if (res >= 0) {
+                    return this.nobodyThere();
+                }
+                return false;
+            }).then((stillEmpty) => {
+                if (stillEmpty) {
+                    return this.cluster();
+                }
+            }).then(() => {
+                this.clusterCheck = null;
+            });
+        }
+    }
+    ;
+    wait(ms) {
+        return new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve(ms);
+            }, ms);
+        });
+    }
     dropTables() {
         const tables = this.tables;
         const queries = _.map(_.keys(tables), (tableName) => {
-            const params = (tables[tableName]).join(',\n\t');
             return `DROP TABLE IF EXISTS ${tableName} CASCADE;`;
         });
         return this.clientPromise.then((client) => {
@@ -281,10 +372,25 @@ class ChatCodesSocketIOServer {
                 }),
                 users: _.map(_.keys(userMap), (id) => {
                     const { row, connections } = userMap[id];
+                    let joined = -1;
+                    let left = -1;
+                    let active = true;
+                    _.each(connections, (c) => {
+                        const { action, time } = c;
+                        if (action === 'disconnect') {
+                            active = false;
+                            left = time.getTime();
+                        }
+                        else {
+                            joined = time.getTime();
+                        }
+                    });
                     return {
                         id: row.uid,
                         name: row.name,
-                        active: !_.some(connections, (c) => c['action'] === 'disconnect')
+                        joined: joined,
+                        left: left,
+                        active: active
                     };
                 })
             };
