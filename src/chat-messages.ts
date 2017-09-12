@@ -284,7 +284,7 @@ export class ConnectionMessageGroup extends Group<ConnectionMessage> {
 	public isConnect():boolean { return this.getEarliestItem().isConnect(); }
 	public isDisconnect():boolean { return this.getEarliestItem().isDisconnect(); }
 	public compatibleWith(item:any):boolean {
-		return (item instanceof ConnectionMessage) && (this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect()));
+		return (item instanceof ConnectionMessage) && (this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect());
 	};
 	protected constructNew(items):ConnectionMessageGroup {
 		return new ConnectionMessageGroup(items);
