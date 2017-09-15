@@ -65,9 +65,9 @@ export class ChatCodesSocketIOServer {
 					received: data
 				});
 			});
-			socket.on('disconnect', () => {
-				this.clusterIfEmptyForAWhile();
-			});
+			// socket.on('disconnect', () => {
+				// this.clusterIfEmptyForAWhile();
+			// });
 			console.log(`Client connected (id: ${id})`)
 		});
 		console.log(`Created server on port ${port}`)

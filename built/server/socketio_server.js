@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -115,9 +114,9 @@ class ChatCodesSocketIOServer {
                     received: data
                 });
             });
-            socket.on('disconnect', () => {
-                this.clusterIfEmptyForAWhile();
-            });
+            // socket.on('disconnect', () => {
+            // this.clusterIfEmptyForAWhile();
+            // });
             console.log(`Client connected (id: ${id})`);
         });
         console.log(`Created server on port ${port}`);
