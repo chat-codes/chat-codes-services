@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
@@ -211,8 +212,12 @@ class EditGroup extends Group {
                     const valueBefore = textBefore[i].value;
                     const valueAfter = textAfter[j].value;
                     let diff = difflib.unifiedDiff(valueBefore, valueAfter, { fromfile: editorState.getTitle(), tofile: editorState.getTitle() });
-                    diff[0] = diff[0].trim();
-                    diff[1] = diff[1].trim();
+                    if (diff.length > 0) {
+                        diff[0] = diff[0].trim();
+                    }
+                    if (diff.length > 1) {
+                        diff[1] = diff[1].trim();
+                    }
                     diff = diff.join('\n');
                     diffs.push({
                         editorState: editorState,

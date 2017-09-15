@@ -204,8 +204,8 @@ export class EditGroup extends Group<UndoableDelta> {
 					const valueBefore = textBefore[i].value;
 					const valueAfter = textAfter[j].value;
 					let diff = difflib.unifiedDiff(valueBefore, valueAfter, {fromfile:editorState.getTitle(), tofile:editorState.getTitle()});
-					diff[0]=diff[0].trim();
-					diff[1]=diff[1].trim();
+					if(diff.length > 0) { diff[0]=diff[0].trim(); }
+					if(diff.length > 1) { diff[1]=diff[1].trim(); }
 					diff = diff.join('\n');
 					diffs.push({
 						editorState: editorState,
