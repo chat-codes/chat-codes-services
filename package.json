@@ -20,6 +20,8 @@
         "fuzzyset.js": "0.0.4",
         "pg": "^7.3.0",
         "pusher-js": "^4.1.0",
+        "sharedb": "^1.0.0-beta.7",
+        "sharedb-mongo": "^1.0.0-beta.4",
         "showdown": "^1.7.3",
         "socket.io": "^2.0.3",
         "socket.io-client": "^2.0.3",

@@ -4,6 +4,10 @@ import * as commandLineArgs from 'command-line-args';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as pg from 'pg';
+import * as ShareDB from 'sharedb';
+
+const db = require('sharedb-mongo')('mongodb://localhost:27017/test');
+const share = new ShareDB({db});
 
 pg.defaults.ssl = true;
 
