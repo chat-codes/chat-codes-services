@@ -5,6 +5,9 @@ const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
 const CodeMirror = require("codemirror");
+const ShareDB = require("sharedb/lib/client");
+const socket = new WebSocket('ws://localhost:8080');
+const connection = new ShareDB.Connection(socket);
 ;
 const CURRENT = -1;
 /*

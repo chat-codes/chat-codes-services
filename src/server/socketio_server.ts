@@ -94,7 +94,7 @@ export class ChatCodesSocketIOServer {
 			return true;
 		}
 	}
-	private createShareDBDoc(channelName:string, id:string):Promise<any> {
+	private createShareDBDoc(channelName:string, id:string, contents:string):Promise<any> {
 		return new Promise((resolve, reject) => {
 			var connection = this.share.connect();
 			var doc = connection.get('examples', 'counter');
@@ -102,7 +102,7 @@ export class ChatCodesSocketIOServer {
 				if(err) {
 					reject(err);
 				} else if(doc.type === null) {
-					doc.create('', () => {
+					doc.create(contents, () => {
 						resolve(doc);
 					})
 				} else {
@@ -168,9 +168,9 @@ export class ChatCodesSocketIOServer {
 
 			s.on('data', (eventName:string, payload:any) => {
 				if(eventName === 'editor-opened') {
-					const {id} = payload;
+					const {id, contents} = payload;
 
-					this.createShareDBDoc(channelName, id);
+					this.createShareDBDoc(channelName, id, contents);
 					// console.log(payload);
 				}
 				// console.log(eventName);

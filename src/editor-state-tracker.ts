@@ -7,6 +7,10 @@ import { ChatUser, ChatUserList } from './chat-user';
 import { Timestamped } from './chat-messages';
 import * as CodeMirror from 'codemirror';
 
+import * as ShareDB from 'sharedb/lib/client';
+const socket = new WebSocket('ws://localhost:8080');
+const connection = new ShareDB.Connection(socket);
+
 interface SerializedRange {
 	start: Array<number>,
 	end: Array<number>
