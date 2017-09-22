@@ -1,10 +1,10 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
 const CodeMirror = require("codemirror");
+const ShareDB = require("sharedb/lib/client");
 ;
 const CURRENT = -1;
 /*
@@ -525,6 +525,9 @@ class EditorState {
     ;
 }
 exports.EditorState = EditorState;
+const socket = new WebSocket('ws:/localhost:8080');
+const connection = new ShareDB.Connection(socket);
+console.log(connection);
 class EditorStateTracker extends events_1.EventEmitter {
     constructor(EditorWrapperClass, channelCommunicationService, userList) {
         super();
@@ -533,6 +536,22 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.userList = userList;
         this.editorStates = {};
         this.currentTimestamp = CURRENT;
+        this.socket = new WebSocket('ws://localhost:8080');
+    }
+    createEditor(id, contents, grammarName, modified) {
+        this.channelCommunicationService.emitEditorOpened({ id, contents });
+        //
+        // this.commLayer.channelService.emitEditorOpened({
+        //     id: id
+        // });
+        // const openDelta =  {
+        // 	type: 'open',
+        // 	id: id,
+        // 	contents: '',
+        // 	grammarName: 'None',
+        // 	title: title,
+        // 	modified: false
+        // };
     }
     getAllEditors() {
         return Object.keys(this.editorStates).map(k => this.editorStates[k]);

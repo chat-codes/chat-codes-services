@@ -5,9 +5,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as pg from 'pg';
 import * as ShareDB from 'sharedb';
-
-const db = require('sharedb-mongo')('mongodb://localhost:27017/test');
-const share = new ShareDB({db});
+import * as ShareDBMongo from 'sharedb-mongo';
+import * as express from 'express';
+import * as http from 'http';
+import * as WebSocket from 'ws';
+import * as WebSocketJSONStream from 'websocket-json-stream';
 
 pg.defaults.ssl = true;
 
@@ -23,11 +25,18 @@ function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):P
 }
 
 export class ChatCodesSocketIOServer {
+	private db = ShareDBMongo('mongodb://localhost:27017/test');
+	private sharedb = new ShareDB({ db: this.db });
 	private io:SocketIO.Server;
 	private namespaces:{[ns:string]: SocketIO.Namespace} = {};
 	private members:{[id:string]:any} = {};
 	private clientPromise:Promise<pg.Client>;
+	private app = express();
+	private server = http.createServer(this.app);
+	private wss = new WebSocket.Server( { server: this.server } );
 	constructor(private port:number, dbURL:string) {
+		this.server.listen(8080);
+		console.log('Express listening in 8080');
 		let urlPromise:Promise<string>;
 		if(dbURL) {
 			urlPromise = Promise.resolve(dbURL);
@@ -74,6 +83,8 @@ export class ChatCodesSocketIOServer {
 			// });
 			console.log(`Client connected (id: ${id})`)
 		});
+
+
 		console.log(`Created server on port ${port}`)
 	}
 	private getNamespace(name:string): SocketIO.Namespace {
@@ -88,13 +99,30 @@ export class ChatCodesSocketIOServer {
 		}  else {
 			return true;
 		}
-	}
-	private createNamespace(name:string):SocketIO.Namespace {
-		const ns = this.io.of(`/${name}`);
+	};
+	private createShareDBDoc(channelName:string, id:string, contents:string):Promise<any> {
+		return new Promise((resolve, reject) => {
+			const connection = this.sharedb.connect();
+			const doc = connection.get(channelName, id);
+			doc.fetch((err) => {
+				if(err) {
+					reject(err);
+				} else if(doc.type === null) {
+					doc.create(contents, () => {
+						resolve(doc);
+					});
+				} else {
+					resolve(doc);
+				}
+			});
+		});
+	};
+	private createNamespace(channelName:string):SocketIO.Namespace {
+		const ns = this.io.of(`/${channelName}`);
 
 		const dbChannelID:Promise<number> = this.clientPromise.then((client) => {
-			console.log(`DB: Insert ${name} into channels`);
-			return client.query(`INSERT INTO channels (name, created) VALUES ($1::text, now()) RETURNING id`, [name]);
+			console.log(`DB: Insert ${channelName} into channels`);
+			return client.query(`INSERT INTO channels (name, created) VALUES ($1::text, now()) RETURNING id`, [channelName]);
 		}).then((res) => {
 			return res.rows[0].id;
 		});
@@ -140,24 +168,32 @@ export class ChatCodesSocketIOServer {
 					s.broadcast.emit('member-added', member);
 					this.getChannelState(channelID);
 				});
-				console.log(`Client (${id} in ${name}) set username to ${username}`);
+				console.log(`Client (${id} in ${channelName}) set username to ${username}`);
 			});
 
 			s.on('data', (eventName:string, payload:any) => {
-				if(this.shouldLogData(eventName, payload)) {
-					Promise.all([dbChannelID, this.clientPromise]).then((result) => {
-						const channelID:number = result[0];
-						const client:pg.Client = result[1];
-
-						return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
+				if(eventName === 'editor-opened') {
+					const {id, contents} = payload;
+					this.createShareDBDoc(channelName, id, contents).then((doc) => {
+						console.log(doc);
 					});
 				}
-				s.broadcast.emit(`data-${eventName}`, payload);
+	//
+	// private createShareDBDoc(channelName:string, id:string, contents:string):Promise<any> {
+	// 			if(this.shouldLogData(eventName, payload)) {
+	// 				Promise.all([dbChannelID, this.clientPromise]).then((result) => {
+	// 					const channelID:number = result[0];
+	// 					const client:pg.Client = result[1];
+	//
+	// 					return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
+	// 				});
+	// 			}
+	// 			s.broadcast.emit(`data-${eventName}`, payload);
 			});
 			s.on('disconnect', () => {
 				member.left = (new Date()).getTime();
 
-				Promise.all([dbChannelID, this.clientPromise, this.getMembers(name)]).then((result) => {
+				Promise.all([dbChannelID, this.clientPromise, this.getMembers(channelName)]).then((result) => {
 					const channelID:number = result[0];
 					const client:pg.Client = result[1];
 					const members = result[2];
@@ -168,22 +204,22 @@ export class ChatCodesSocketIOServer {
 						])
 					];
 					if(members.length === 0) {
-						delete this.namespaces[name];
+						delete this.namespaces[channelName];
 						ns.removeAllListeners();
 
-						console.log(`DB: Channel ${name} destroyed`);
+						console.log(`DB: Channel ${channelName} destroyed`);
 						queries.push(client.query(`UPDATE channels SET destroyed=now() WHERE id=$1::integer`, [channelID]));
 					}
 					return Promise.all(queries);
 				});
 
 				s.broadcast.emit('member-removed', member);
-				console.log(`Client (${id} in ${name}) disconnected`);
+				console.log(`Client (${id} in ${channelName}) disconnected`);
 				s.removeAllListeners();
 			});
 
 			s.on('get-members', (callback) => {
-				this.getMembers(name).then((clients) => {
+				this.getMembers(channelName).then((clients) => {
 					const result = {};
 					_.each(clients, (id:string) => {
 						result[id] = this.members[id].info;
@@ -195,9 +231,9 @@ export class ChatCodesSocketIOServer {
 						count: clients.length
 					});
 				});
-				console.log(`Client (${id} in ${name}) requested members`);
+				console.log(`Client (${id} in ${channelName}) requested members`);
 			});
-			console.log(`Client connected to namespace ${name} (${id})`);
+			console.log(`Client connected to namespace ${channelName} (${id})`);
 		});
 		return ns;
 	}

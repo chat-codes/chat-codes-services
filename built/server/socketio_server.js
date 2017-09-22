@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -7,8 +6,10 @@ const fs = require("fs");
 const path = require("path");
 const pg = require("pg");
 const ShareDB = require("sharedb");
-const db = require('sharedb-mongo')('mongodb://localhost:27017/test');
-const share = new ShareDB({ db });
+const ShareDBMongo = require("sharedb-mongo");
+const express = require("express");
+const http = require("http");
+const WebSocket = require("ws");
 pg.defaults.ssl = true;
 function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
     return new Promise((resolve, reject) => {
@@ -25,8 +26,13 @@ function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
 class ChatCodesSocketIOServer {
     constructor(port, dbURL) {
         this.port = port;
+        this.db = ShareDBMongo('mongodb://localhost:27017/test');
+        this.sharedb = new ShareDB({ db: this.db });
         this.namespaces = {};
         this.members = {};
+        this.app = express();
+        this.server = http.createServer(this.app);
+        this.wss = new WebSocket.Server({ server: this.server });
         this.clusterCheck = null;
         this.tables = {
             'channels': {
@@ -77,6 +83,8 @@ class ChatCodesSocketIOServer {
                 cluster: 'channel_dat'
             }
         };
+        this.server.listen(8080);
+        console.log('Express listening in 8080');
         let urlPromise;
         if (dbURL) {
             urlPromise = Promise.resolve(dbURL);
@@ -140,11 +148,32 @@ class ChatCodesSocketIOServer {
             return true;
         }
     }
-    createNamespace(name) {
-        const ns = this.io.of(`/${name}`);
+    ;
+    createShareDBDoc(channelName, id, contents) {
+        return new Promise((resolve, reject) => {
+            const connection = this.sharedb.connect();
+            const doc = connection.get(channelName, id);
+            doc.fetch((err) => {
+                if (err) {
+                    reject(err);
+                }
+                else if (doc.type === null) {
+                    doc.create(contents, () => {
+                        resolve(doc);
+                    });
+                }
+                else {
+                    resolve(doc);
+                }
+            });
+        });
+    }
+    ;
+    createNamespace(channelName) {
+        const ns = this.io.of(`/${channelName}`);
         const dbChannelID = this.clientPromise.then((client) => {
-            console.log(`DB: Insert ${name} into channels`);
-            return client.query(`INSERT INTO channels (name, created) VALUES ($1::text, now()) RETURNING id`, [name]);
+            console.log(`DB: Insert ${channelName} into channels`);
+            return client.query(`INSERT INTO channels (name, created) VALUES ($1::text, now()) RETURNING id`, [channelName]);
         }).then((res) => {
             return res.rows[0].id;
         });
@@ -186,21 +215,30 @@ class ChatCodesSocketIOServer {
                     s.broadcast.emit('member-added', member);
                     this.getChannelState(channelID);
                 });
-                console.log(`Client (${id} in ${name}) set username to ${username}`);
+                console.log(`Client (${id} in ${channelName}) set username to ${username}`);
             });
             s.on('data', (eventName, payload) => {
-                if (this.shouldLogData(eventName, payload)) {
-                    Promise.all([dbChannelID, this.clientPromise]).then((result) => {
-                        const channelID = result[0];
-                        const client = result[1];
-                        return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
+                if (eventName === 'editor-opened') {
+                    const { id, contents } = payload;
+                    this.createShareDBDoc(channelName, id, contents).then((doc) => {
+                        console.log(doc);
                     });
                 }
-                s.broadcast.emit(`data-${eventName}`, payload);
+                //
+                // private createShareDBDoc(channelName:string, id:string, contents:string):Promise<any> {
+                // 			if(this.shouldLogData(eventName, payload)) {
+                // 				Promise.all([dbChannelID, this.clientPromise]).then((result) => {
+                // 					const channelID:number = result[0];
+                // 					const client:pg.Client = result[1];
+                //
+                // 					return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
+                // 				});
+                // 			}
+                // 			s.broadcast.emit(`data-${eventName}`, payload);
             });
             s.on('disconnect', () => {
                 member.left = (new Date()).getTime();
-                Promise.all([dbChannelID, this.clientPromise, this.getMembers(name)]).then((result) => {
+                Promise.all([dbChannelID, this.clientPromise, this.getMembers(channelName)]).then((result) => {
                     const channelID = result[0];
                     const client = result[1];
                     const members = result[2];
@@ -211,19 +249,19 @@ class ChatCodesSocketIOServer {
                         ])
                     ];
                     if (members.length === 0) {
-                        delete this.namespaces[name];
+                        delete this.namespaces[channelName];
                         ns.removeAllListeners();
-                        console.log(`DB: Channel ${name} destroyed`);
+                        console.log(`DB: Channel ${channelName} destroyed`);
                         queries.push(client.query(`UPDATE channels SET destroyed=now() WHERE id=$1::integer`, [channelID]));
                     }
                     return Promise.all(queries);
                 });
                 s.broadcast.emit('member-removed', member);
-                console.log(`Client (${id} in ${name}) disconnected`);
+                console.log(`Client (${id} in ${channelName}) disconnected`);
                 s.removeAllListeners();
             });
             s.on('get-members', (callback) => {
-                this.getMembers(name).then((clients) => {
+                this.getMembers(channelName).then((clients) => {
                     const result = {};
                     _.each(clients, (id) => {
                         result[id] = this.members[id].info;
@@ -235,9 +273,9 @@ class ChatCodesSocketIOServer {
                         count: clients.length
                     });
                 });
-                console.log(`Client (${id} in ${name}) requested members`);
+                console.log(`Client (${id} in ${channelName}) requested members`);
             });
-            console.log(`Client connected to namespace ${name} (${id})`);
+            console.log(`Client connected to namespace ${channelName} (${id})`);
         });
         return ns;
     }

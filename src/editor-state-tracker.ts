@@ -6,6 +6,8 @@ import { ChannelCommunicationService } from './communication-service';
 import { ChatUser, ChatUserList } from './chat-user';
 import { Timestamped } from './chat-messages';
 import * as CodeMirror from 'codemirror';
+import * as ShareDB from 'sharedb/lib/client';
+
 
 interface SerializedRange {
 	start: Array<number>,
@@ -538,12 +540,32 @@ export class EditorState {
 		return _.last(this.getDeltas()).getTimestamp() > timestamp;
 	};
 }
+const socket = new WebSocket('ws:/localhost:8080');
+const connection = new ShareDB.Connection(socket);
+console.log(connection);
 
 export class EditorStateTracker extends EventEmitter {
     private editorStates:{[editorID:number]: EditorState} = {};
 	private currentTimestamp:number=CURRENT;
+	private socket:WebSocket = new WebSocket('ws://localhost:8080')
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
+	}
+
+	public createEditor(id:string, contents:string, grammarName:string, modified:boolean) {
+		this.channelCommunicationService.emitEditorOpened({ id, contents });
+			//
+            // this.commLayer.channelService.emitEditorOpened({
+            //     id: id
+            // });
+    		// const openDelta =  {
+    		// 	type: 'open',
+    		// 	id: id,
+    		// 	contents: '',
+    		// 	grammarName: 'None',
+    		// 	title: title,
+    		// 	modified: false
+    		// };
 	}
 
 	public getAllEditors():Array<EditorState> {
