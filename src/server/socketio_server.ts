@@ -35,9 +35,6 @@ export class ChatCodesSocketIOServer {
 	private server = http.createServer(this.app);
 	private wss = new WebSocket.Server( { server: this.server } );
 	constructor(private port:number, dbURL:string) {
-		this.wss.on('connection', (ws, req) => {
-			console.log('abc');
-		});
 		this.server.listen(8080);
 		console.log('Express listening in 8080');
 		let urlPromise:Promise<string>;
@@ -86,7 +83,6 @@ export class ChatCodesSocketIOServer {
 			// });
 			console.log(`Client connected (id: ${id})`)
 		});
-
 
 		console.log(`Created server on port ${port}`)
 	}
@@ -178,7 +174,7 @@ export class ChatCodesSocketIOServer {
 				if(eventName === 'editor-opened') {
 					const {id, contents} = payload;
 					this.createShareDBDoc(channelName, id, contents).then((doc) => {
-						console.log(doc);
+						console.log("DOC");
 					});
 				}
 	//

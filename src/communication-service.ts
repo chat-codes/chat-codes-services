@@ -428,6 +428,9 @@ export class ChannelCommunicationService extends EventEmitter {
     private getTimestamp():number {
         return new Date().getTime();
     };
+    public getChannelName():string {
+        return this.channelName;
+    }
 }
 
 /* A class to create and manage ChannelCommunicationService instances */

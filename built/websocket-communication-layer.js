@@ -1,62 +1,16 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const socket_io_client_1 = require("socket.io-client");
 const _ = require("underscore");
+const WebSocket = require("ws");
 class SocketIOCommunicationLayer {
     constructor(authInfo) {
         this.authInfo = authInfo;
         this.namespaces = {};
         this.username = authInfo.username;
-        this.manager = new Promise((resolve, reject) => {
-            resolve(new socket_io_client_1.Manager(`http://${authInfo.host}:${authInfo.port}`));
-        });
-        this.mainSocket = this.manager.then((manager) => {
-            return manager.socket('/');
-        });
+        this.ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
     }
-    getNamespaceAndHistory(name) {
-        if (_.has(this.namespaces, name)) {
-            return this.namespaces[name];
-        }
-        else {
-            let socket;
-            this.namespaces[name] = this.mainSocket.then((socket) => {
-                return new Promise((resolve, reject) => {
-                    socket.emit('request-join-room', name, (response) => {
-                        resolve(response);
-                    });
-                });
-            }).then(() => {
-                return this.manager;
-            }).then((manager) => {
-                socket = manager.socket(`/${name}`);
-                return new Promise((resolve, reject) => {
-                    socket.on('connect', (event) => {
-                        socket.emit('set-username', this.username, (history) => {
-                            resolve(history);
-                        });
-                    });
-                });
-            }).then((history) => {
-                return {
-                    history: history,
-                    socket: socket,
-                    listeners: {}
-                };
-            });
-            return this.namespaces[name];
-        }
-    }
-    ;
-    getNamespace(name) {
-        return this.getNamespaceAndHistory(name).then((data) => {
-            return data.socket;
-        });
-    }
-    trigger(channelName, eventName, eventContents) {
-        this.getNamespace(channelName).then((room) => {
-            room.emit('data', eventName, eventContents);
-        });
+    trigger(channel, event, payload) {
+        this.ws.send({ channel, event, payload });
     }
     ;
     bind(channelName, eventName, callback) {
@@ -132,4 +86,4 @@ class SocketIOCommunicationLayer {
     }
 }
 exports.SocketIOCommunicationLayer = SocketIOCommunicationLayer;
-//# sourceMappingURL=socket-communication-layer.js.map
+//# sourceMappingURL=websocket-communication-layer.js.map

@@ -1,9 +1,11 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
 const CodeMirror = require("codemirror");
+const ShareDB = require("sharedb/lib/client");
 ;
 const CURRENT = -1;
 /*
@@ -533,9 +535,24 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.editorStates = {};
         this.currentTimestamp = CURRENT;
         this.socket = new WebSocket('ws://localhost:8080');
+        this.connection = new ShareDB.Connection(this.socket);
     }
     createEditor(id, contents, grammarName, modified) {
         this.channelCommunicationService.emitEditorOpened({ id, contents });
+        const doc = this.connection.get(this.channelCommunicationService.getChannelName(), id);
+        // const doc = this.connection.get('abc', 'def');
+        return new Promise((resolve, reject) => {
+            console.log(doc);
+            doc.subscribe((err) => {
+                console.log(err);
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(doc);
+                }
+            });
+        });
         //
         // this.commLayer.channelService.emitEditorOpened({
         //     id: id

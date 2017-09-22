@@ -21,6 +21,7 @@
         "difflib": "^0.2.4",
         "express": "^4.15.4",
         "fuzzyset.js": "0.0.4",
+        "logdown": "^3.1.0",
         "pg": "^7.3.0",
         "pusher-js": "^4.1.0",
         "sharedb": "^1.0.0-beta.7",
@@ -29,12 +30,8 @@
         "socket.io": "^2.0.3",
         "socket.io-client": "^2.0.3",
         "underscore": "^1.8.3",
-<<<<<<< HEAD
-        "websocket-json-stream": "0.0.3"
-=======
         "websocket-json-stream": "0.0.3",
         "ws": "^3.2.0"
->>>>>>> d997a9deca0e26081f5778c77327c2a6b8a8f8bf
     },
     "devDependencies": {}
 }

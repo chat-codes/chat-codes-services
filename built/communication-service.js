@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const pusher_communication_layer_1 = require("./pusher-communication-layer");
@@ -386,6 +387,9 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         return new Date().getTime();
     }
     ;
+    getChannelName() {
+        return this.channelName;
+    }
 }
 exports.ChannelCommunicationService = ChannelCommunicationService;
 /* A class to create and manage ChannelCommunicationService instances */

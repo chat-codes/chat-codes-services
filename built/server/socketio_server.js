@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -83,9 +84,6 @@ class ChatCodesSocketIOServer {
                 cluster: 'channel_dat'
             }
         };
-        this.wss.on('connection', (ws, req) => {
-            console.log('abc');
-        });
         this.server.listen(8080);
         console.log('Express listening in 8080');
         let urlPromise;
@@ -224,7 +222,7 @@ class ChatCodesSocketIOServer {
                 if (eventName === 'editor-opened') {
                     const { id, contents } = payload;
                     this.createShareDBDoc(channelName, id, contents).then((doc) => {
-                        console.log(doc);
+                        console.log("DOC");
                     });
                 }
                 //

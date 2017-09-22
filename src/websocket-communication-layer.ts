@@ -1,64 +1,18 @@
-import { Manager, Socket } from 'socket.io-client';
 import { CommunicationLayer } from './communication-layer-interface';
 import * as _ from 'underscore';
+import * as WebSocket from 'ws';
 
 export class SocketIOCommunicationLayer implements CommunicationLayer {
-	private manager:Promise<SocketIOClient.Manager>;
-	private mainSocket:Promise<SocketIOClient.Socket>;
+	private ws:WebSocket;
 	private namespaces:{[name:string]:any} = {};
 	private username:string;
 	constructor(private authInfo) {
 		this.username = authInfo.username;
-		this.manager = new Promise<SocketIOClient.Manager>((resolve, reject) => {
-			resolve(new Manager(`http://${authInfo.host}:${authInfo.port}`));
-		});
-		this.mainSocket = this.manager.then((manager) => {
-			return manager.socket('/');
-		});
+		this.ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
 	}
-	private getNamespaceAndHistory(name:string):Promise<any> {
-		if(_.has(this.namespaces, name)) {
-			return this.namespaces[name];
-		} else {
-			let socket:SocketIOClient.Socket;
-			this.namespaces[name] = this.mainSocket.then((socket) => {
-				return new Promise((resolve, reject) => {
-					socket.emit('request-join-room', name, (response) => {
-						resolve(response);
-					});
-				});
-			}).then(() => {
-				return this.manager;
-			}).then((manager) => {
-				socket = manager.socket(`/${name}`);
-				return new Promise<SocketIOClient.Socket>((resolve, reject) => {
-					socket.on('connect', (event) => {
-						socket.emit('set-username', this.username, (history) => {
-							resolve(history);
-						});
-					});
-				});
-			}).then((history) => {
-				return {
-					history: history,
-					socket: socket,
-					listeners: {
 
-					}
-				};
-			});
-			return this.namespaces[name];
-		}
-	};
-	private getNamespace(name:string):Promise<SocketIOClient.Socket> {
-		return this.getNamespaceAndHistory(name).then((data) => {
-			return data.socket;
-		});
-	}
-	public trigger(channelName:string, eventName:string, eventContents:any):void {
-		this.getNamespace(channelName).then((room) => {
-			room.emit('data', eventName, eventContents);
-		});
+	public trigger(channel:string, event:string, payload:any):void {
+		this.ws.send({ channel, event, payload });
 	};
 	public bind(channelName:string, eventName:string, callback:(any)=>any):void {
 		this.getNamespaceAndHistory(channelName).then((data) => {
