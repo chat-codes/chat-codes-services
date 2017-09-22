@@ -13,10 +13,12 @@
         "@types/socket.io": "^1.4.30",
         "@types/socket.io-client": "^1.4.30",
         "@types/underscore": "^1.8.2",
+        "@types/ws": "^3.0.2",
         "codemirror": "^5.29.0",
         "command-line-args": "^4.0.7",
         "diff": "^3.3.0",
         "difflib": "^0.2.4",
+        "express": "^4.15.4",
         "fuzzyset.js": "0.0.4",
         "pg": "^7.3.0",
         "pusher-js": "^4.1.0",
@@ -25,7 +27,9 @@
         "showdown": "^1.7.3",
         "socket.io": "^2.0.3",
         "socket.io-client": "^2.0.3",
-        "underscore": "^1.8.3"
+        "underscore": "^1.8.3",
+        "websocket-json-stream": "0.0.3",
+        "ws": "^3.2.0"
     },
     "devDependencies": {}
 }

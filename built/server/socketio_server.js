@@ -8,7 +8,8 @@ const path = require("path");
 const pg = require("pg");
 const ShareDB = require("sharedb");
 const db = require('sharedb-mongo')('mongodb://localhost:27017/test');
-const share = new ShareDB({ db });
+function createDoc(callback) {
+}
 pg.defaults.ssl = true;
 function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
     return new Promise((resolve, reject) => {
@@ -27,6 +28,7 @@ class ChatCodesSocketIOServer {
         this.port = port;
         this.namespaces = {};
         this.members = {};
+        this.share = new ShareDB({ db });
         this.clusterCheck = null;
         this.tables = {
             'channels': {
@@ -140,11 +142,30 @@ class ChatCodesSocketIOServer {
             return true;
         }
     }
-    createNamespace(name) {
-        const ns = this.io.of(`/${name}`);
+    createShareDBDoc(channelName, id) {
+        return new Promise((resolve, reject) => {
+            var connection = this.share.connect();
+            var doc = connection.get('examples', 'counter');
+            doc.fetch(function (err) {
+                if (err) {
+                    reject(err);
+                }
+                else if (doc.type === null) {
+                    doc.create('', () => {
+                        resolve(doc);
+                    });
+                }
+                else {
+                    resolve(doc);
+                }
+            });
+        });
+    }
+    createNamespace(channelName) {
+        const ns = this.io.of(`/${channelName}`);
         const dbChannelID = this.clientPromise.then((client) => {
-            console.log(`DB: Insert ${name} into channels`);
-            return client.query(`INSERT INTO channels (name, created) VALUES ($1::text, now()) RETURNING id`, [name]);
+            console.log(`DB: Insert ${channelName} into channels`);
+            return client.query(`INSERT INTO channels (name, created) VALUES ($1::text, now()) RETURNING id`, [channelName]);
         }).then((res) => {
             return res.rows[0].id;
         });
@@ -186,21 +207,28 @@ class ChatCodesSocketIOServer {
                     s.broadcast.emit('member-added', member);
                     this.getChannelState(channelID);
                 });
-                console.log(`Client (${id} in ${name}) set username to ${username}`);
+                console.log(`Client (${id} in ${channelName}) set username to ${username}`);
             });
             s.on('data', (eventName, payload) => {
-                if (this.shouldLogData(eventName, payload)) {
-                    Promise.all([dbChannelID, this.clientPromise]).then((result) => {
-                        const channelID = result[0];
-                        const client = result[1];
-                        return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
-                    });
+                if (eventName === 'editor-opened') {
+                    const { id } = payload;
+                    this.createShareDBDoc(channelName, id);
+                    // console.log(payload);
                 }
-                s.broadcast.emit(`data-${eventName}`, payload);
+                // console.log(eventName);
+                // if(this.shouldLogData(eventName, payload)) {
+                // 	Promise.all([dbChannelID, this.clientPromise]).then((result) => {
+                // 		const channelID:number = result[0];
+                // 		const client:pg.Client = result[1];
+                //
+                // 		return client.query(`INSERT INTO channel_data (user_id, channel_id, time, data, event_name) VALUES ($1::integer, $2::integer, now(), $3::text, $4::text)`, [dbid, channelID, JSON.stringify(payload), eventName]);
+                // 	});
+                // }
+                // s.broadcast.emit(`data-${eventName}`, payload);
             });
             s.on('disconnect', () => {
                 member.left = (new Date()).getTime();
-                Promise.all([dbChannelID, this.clientPromise, this.getMembers(name)]).then((result) => {
+                Promise.all([dbChannelID, this.clientPromise, this.getMembers(channelName)]).then((result) => {
                     const channelID = result[0];
                     const client = result[1];
                     const members = result[2];
@@ -211,19 +239,19 @@ class ChatCodesSocketIOServer {
                         ])
                     ];
                     if (members.length === 0) {
-                        delete this.namespaces[name];
+                        delete this.namespaces[channelName];
                         ns.removeAllListeners();
-                        console.log(`DB: Channel ${name} destroyed`);
+                        console.log(`DB: Channel ${channelName} destroyed`);
                         queries.push(client.query(`UPDATE channels SET destroyed=now() WHERE id=$1::integer`, [channelID]));
                     }
                     return Promise.all(queries);
                 });
                 s.broadcast.emit('member-removed', member);
-                console.log(`Client (${id} in ${name}) disconnected`);
+                console.log(`Client (${id} in ${channelName}) disconnected`);
                 s.removeAllListeners();
             });
             s.on('get-members', (callback) => {
-                this.getMembers(name).then((clients) => {
+                this.getMembers(channelName).then((clients) => {
                     const result = {};
                     _.each(clients, (id) => {
                         result[id] = this.members[id].info;
@@ -235,15 +263,15 @@ class ChatCodesSocketIOServer {
                         count: clients.length
                     });
                 });
-                console.log(`Client (${id} in ${name}) requested members`);
+                console.log(`Client (${id} in ${channelName}) requested members`);
             });
-            console.log(`Client connected to namespace ${name} (${id})`);
+            console.log(`Client connected to namespace ${channelName} (${id})`);
         });
         return ns;
     }
-    getMembers(name) {
+    getMembers(channelName) {
         return new Promise((resolve, reject) => {
-            const ns = this.io.of(`/${name}`);
+            const ns = this.io.of(`/${channelName}`);
             ns.clients((err, clients) => {
                 if (err) {
                     reject(err);
