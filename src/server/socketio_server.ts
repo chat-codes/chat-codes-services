@@ -35,6 +35,9 @@ export class ChatCodesSocketIOServer {
 	private server = http.createServer(this.app);
 	private wss = new WebSocket.Server( { server: this.server } );
 	constructor(private port:number, dbURL:string) {
+		this.wss.on('connection', (ws, req) => {
+			console.log('abc');
+		});
 		this.server.listen(8080);
 		console.log('Express listening in 8080');
 		let urlPromise:Promise<string>;
@@ -237,9 +240,9 @@ export class ChatCodesSocketIOServer {
 		});
 		return ns;
 	}
-	private getMembers(name:string):Promise<Array<any>> {
+	private getMembers(channelName:string):Promise<Array<any>> {
 		return new Promise<Array<any>>((resolve, reject) => {
-			const ns = this.io.of(`/${name}`);
+			const ns = this.io.of(`/${channelName}`);
 			ns.clients((err, clients) => {
 				if(err) { reject(err); }
 				else { resolve(clients); }

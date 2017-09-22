@@ -8,7 +8,6 @@ import { Timestamped } from './chat-messages';
 import * as CodeMirror from 'codemirror';
 import * as ShareDB from 'sharedb/lib/client';
 
-
 interface SerializedRange {
 	start: Array<number>,
 	end: Array<number>
@@ -540,9 +539,6 @@ export class EditorState {
 		return _.last(this.getDeltas()).getTimestamp() > timestamp;
 	};
 }
-const socket = new WebSocket('ws:/localhost:8080');
-const connection = new ShareDB.Connection(socket);
-console.log(connection);
 
 export class EditorStateTracker extends EventEmitter {
     private editorStates:{[editorID:number]: EditorState} = {};

@@ -83,6 +83,9 @@ class ChatCodesSocketIOServer {
                 cluster: 'channel_dat'
             }
         };
+        this.wss.on('connection', (ws, req) => {
+            console.log('abc');
+        });
         this.server.listen(8080);
         console.log('Express listening in 8080');
         let urlPromise;
@@ -279,9 +282,9 @@ class ChatCodesSocketIOServer {
         });
         return ns;
     }
-    getMembers(name) {
+    getMembers(channelName) {
         return new Promise((resolve, reject) => {
-            const ns = this.io.of(`/${name}`);
+            const ns = this.io.of(`/${channelName}`);
             ns.clients((err, clients) => {
                 if (err) {
                     reject(err);
