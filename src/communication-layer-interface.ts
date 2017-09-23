@@ -3,9 +3,8 @@ export interface CommunicationLayer {
 	bind(channelName:string, eventName:string, callback:(any)=>any):void;
 	getMembers(channelName:string):Promise<any>;
 	channelNameAvailable(channelName:string):Promise<boolean>;
-	onMemberAdded(channelName:string, callback:(event)=>any):void;
-	onMemberRemoved(channelName:string, callback:(event)=>any);
+	// onMemberAdded(channelName:string, callback:(event)=>any):void;
+	// onMemberRemoved(channelName:string, callback:(event)=>any);
 	channelReady(channelName:string):Promise<any>;
-	reTrigger(channelName:string, eventName:string, payload):void;
 	destroy():void;
 }

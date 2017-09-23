@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const pusher_communication_layer_1 = require("./pusher-communication-layer");
-const socket_communication_layer_1 = require("./socket-communication-layer");
+const websocket_communication_layer_1 = require("./websocket-communication-layer");
 const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
@@ -201,19 +201,17 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         //     this.userList.addAll(memberInfo);
         //     this.commLayer.trigger(this.channelName, 'request-history', this.myID);
         // });
-        // Add anyone who subsequently joines
-        this.commLayer.onMemberAdded(this.channelName, (member) => {
-            const memberID = member.id;
-            const user = this.userList.add(false, memberID, member.info.name, member.joined, member.left);
-            this.messageGroups.addConnectionMessage(user, user.getJoined());
-        });
-        //When a user leaves, remove them from the user list and remove their cursor
-        this.commLayer.onMemberRemoved(this.channelName, (member) => {
-            this.editorStateTracker.removeUserCursors(member);
-            const user = this.userList.remove(member.id);
-            user.setLeft(member.left);
-            this.messageGroups.addDisconnectionMessage(user, user.getLeft());
-        });
+        // this.commLayer.onMemberAdded(this.channelName, (member) => {
+        //     const memberID = member.id;
+        //     const user = this.userList.add(false, memberID, member.info.name, member.joined, member.left);
+        //     this.messageGroups.addConnectionMessage(user, user.getJoined());
+        // });
+        // this.commLayer.onMemberRemoved(this.channelName, (member) => {
+        //     this.editorStateTracker.removeUserCursors(member);
+        //     const user = this.userList.remove(member.id);
+        //     user.setLeft(member.left);
+        //     this.messageGroups.addDisconnectionMessage(user, user.getLeft());
+        // });
         this.commLayer.channelReady(this.channelName).then((history) => {
             const { myID, data, users } = history;
             this.myID = myID;
@@ -227,10 +225,10 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             if (users.length === 1) {
                 this._isRoot = true;
             }
-            _.each(data, (h) => {
-                const { eventName, payload } = h;
-                this.commLayer.reTrigger(this.channelName, eventName, payload);
-            });
+            // _.each(data, (h:any) => {
+            //     const {eventName, payload} = h;
+            //     this.commLayer.reTrigger(this.channelName, eventName, payload);
+            // });
         });
     }
     isRoot() {
@@ -401,7 +399,8 @@ class CommunicationService {
             this.commLayer = new pusher_communication_layer_1.PusherCommunicationLayer(authInfo);
         }
         else {
-            this.commLayer = new socket_communication_layer_1.SocketIOCommunicationLayer(authInfo);
+            // this.commLayer = new SocketIOCommunicationLayer(authInfo);
+            this.commLayer = new websocket_communication_layer_1.WebSocketCommunicationLayer(authInfo);
         }
     }
     /**

@@ -3,6 +3,7 @@ import * as _ from 'underscore';
 import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { SocketIOCommunicationLayer } from './socket-communication-layer';
+import { WebSocketCommunicationLayer } from './websocket-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
 import { UndoableDelta, EditorStateTracker, EditorState } from './editor-state-tracker';
@@ -224,19 +225,17 @@ export class ChannelCommunicationService extends EventEmitter {
         //     this.commLayer.trigger(this.channelName, 'request-history', this.myID);
         // });
 
-        // Add anyone who subsequently joines
-        this.commLayer.onMemberAdded(this.channelName, (member) => {
-            const memberID = member.id;
-            const user = this.userList.add(false, memberID, member.info.name, member.joined, member.left);
-            this.messageGroups.addConnectionMessage(user, user.getJoined());
-        });
-        //When a user leaves, remove them from the user list and remove their cursor
-        this.commLayer.onMemberRemoved(this.channelName, (member) => {
-            this.editorStateTracker.removeUserCursors(member);
-            const user = this.userList.remove(member.id);
-            user.setLeft(member.left);
-            this.messageGroups.addDisconnectionMessage(user, user.getLeft());
-        });
+        // this.commLayer.onMemberAdded(this.channelName, (member) => {
+        //     const memberID = member.id;
+        //     const user = this.userList.add(false, memberID, member.info.name, member.joined, member.left);
+        //     this.messageGroups.addConnectionMessage(user, user.getJoined());
+        // });
+        // this.commLayer.onMemberRemoved(this.channelName, (member) => {
+        //     this.editorStateTracker.removeUserCursors(member);
+        //     const user = this.userList.remove(member.id);
+        //     user.setLeft(member.left);
+        //     this.messageGroups.addDisconnectionMessage(user, user.getLeft());
+        // });
 
         this.commLayer.channelReady(this.channelName).then((history) => {
             const {myID, data, users} = history;
@@ -251,10 +250,10 @@ export class ChannelCommunicationService extends EventEmitter {
             if(users.length === 1) { // I'm the only one here
                 this._isRoot = true;
             }
-            _.each(data, (h:any) => {
-                const {eventName, payload} = h;
-                this.commLayer.reTrigger(this.channelName, eventName, payload);
-            });
+            // _.each(data, (h:any) => {
+            //     const {eventName, payload} = h;
+            //     this.commLayer.reTrigger(this.channelName, eventName, payload);
+            // });
         });
     }
     private isRoot():boolean {
@@ -439,7 +438,8 @@ export class CommunicationService {
         if(USE_PUSHER) {
             this.commLayer = new PusherCommunicationLayer(authInfo);
         } else {
-            this.commLayer = new SocketIOCommunicationLayer(authInfo);
+            // this.commLayer = new SocketIOCommunicationLayer(authInfo);
+            this.commLayer = new WebSocketCommunicationLayer(authInfo);
         }
     }
     public commLayer:CommunicationLayer; // The underlying communication mechanism
