@@ -30,12 +30,16 @@ class ChatCodesShareDBServer {
         this.wss = new WebSocket.Server({ server: this.server });
         this.db = ShareDBMongo('mongodb://localhost:27017/test');
         this.sharedb = new ShareDB({ db: this.db });
-        this.wss.on('connection', () => {
-            console.log(arguments);
+        this.wss.on('connection', (socket) => {
+            this.handleConnection(socket);
         });
         this.server.listen(port);
         console.log(`Created server on port ${port}`);
     }
+    ;
+    handleConnection(socket) {
+    }
+    ;
     getShareDBChannelList() {
         return new Promise((resolve, reject) => {
             const connection = this.sharedb.connect();

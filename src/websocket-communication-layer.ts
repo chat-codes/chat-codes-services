@@ -7,7 +7,6 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 	private namespaces:{[name:string]:any} = {};
 	private username:string;
 	constructor(private authInfo) {
-		console.log(authInfo);
 		this.username = authInfo.username;
 		this.ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
 	}
@@ -98,8 +97,45 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 	// 		}
 	// 	});
 	// };
+	private wsSend(data:any) {
+		this.ws.send(JSON.stringify(data));
+	}
+	private messageID:number=1;
+	private wsSendWithResponse(data):Promise<any> {
+		return new Promise((resolve, reject) => {
+			const messageID = this.messageID++;
+			this.wsSend(_.extend({
+				responseID: messageID
+			}, data));
+			const responseListener = (responseStr) => {
+				const response = JSON.parse(responseStr);
+				if(response.responseID === messageID) {
+					resolve(response);
+				}
+			};
+			this.ws.addEventListener('message', responseListener);
+		});
+	};
+
 	public channelReady(channelName:string):Promise<any> {
-		return Promise.resolve(true);
+		return new Promise<boolean>((resolve, reject) => {
+			this.wsSend({
+				type: 'join-channel',
+				channel: channelName
+			});
+			// this.ws.send({
+			// 	type: 'channel-available',
+			// 	channel: channelName
+			// });
+			// const membersListener = (data) => {
+			// 	const {type, channel, event, payload} = data;
+			// 	if(type === 'channel-available-reply' && channel === channelName) {
+			// 		(this.ws as any).removeEventListener('message', membersListener);
+			// 		resolve(payload);
+			// 	}
+			// };
+			// this.ws.on('message', membersListener);
+		});
 	};
 	public destroy():void {
 		this.ws.close(0);

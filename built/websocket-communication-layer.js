@@ -1,11 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const _ = require("underscore");
 // import * as WebSocket from 'ws';
 class WebSocketCommunicationLayer {
     constructor(authInfo) {
         this.authInfo = authInfo;
         this.namespaces = {};
-        console.log(authInfo);
+        this.messageID = 1;
         this.username = authInfo.username;
         this.ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
     }
@@ -99,8 +100,44 @@ class WebSocketCommunicationLayer {
     // 		}
     // 	});
     // };
+    wsSend(data) {
+        this.ws.send(JSON.stringify(data));
+    }
+    wsSendWithResponse(data) {
+        return new Promise((resolve, reject) => {
+            const messageID = this.messageID++;
+            this.wsSend(_.extend({
+                responseID: messageID
+            }, data));
+            const responseListener = (responseStr) => {
+                const response = JSON.parse(responseStr);
+                if (response.responseID === messageID) {
+                    resolve(response);
+                }
+            };
+            this.ws.addEventListener('message', responseListener);
+        });
+    }
+    ;
     channelReady(channelName) {
-        return Promise.resolve(true);
+        return new Promise((resolve, reject) => {
+            this.wsSend({
+                type: 'join-channel',
+                channel: channelName
+            });
+            // this.ws.send({
+            // 	type: 'channel-available',
+            // 	channel: channelName
+            // });
+            // const membersListener = (data) => {
+            // 	const {type, channel, event, payload} = data;
+            // 	if(type === 'channel-available-reply' && channel === channelName) {
+            // 		(this.ws as any).removeEventListener('message', membersListener);
+            // 		resolve(payload);
+            // 	}
+            // };
+            // this.ws.on('message', membersListener);
+        });
     }
     ;
     destroy() {
