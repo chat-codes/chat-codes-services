@@ -92,6 +92,7 @@ export class ChannelCommunicationService extends EventEmitter {
 
         this.commLayer = commService.commLayer; // Pop this object up a level
 
+
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
             // Forward the message to the messageGroups tracker
@@ -435,14 +436,14 @@ export class ChannelCommunicationService extends EventEmitter {
 /* A class to create and manage ChannelCommunicationService instances */
 export class CommunicationService {
     constructor(authInfo, private EditorWrapperClass) {
-        if(USE_PUSHER) {
-            this.commLayer = new PusherCommunicationLayer(authInfo);
-        } else {
-            // this.commLayer = new SocketIOCommunicationLayer(authInfo);
-            this.commLayer = new WebSocketCommunicationLayer(authInfo);
-        }
+        this.commLayer = new SocketIOCommunicationLayer(authInfo);
+        // // if(USE_PUSHER) {
+        // //     this.commLayer = new PusherCommunicationLayer(authInfo);
+        // // } else {
+        //     // this.commLayer = new WebSocketCommunicationLayer(authInfo);
+        // }
     }
-    public commLayer:CommunicationLayer; // The underlying communication mechanism
+    public commLayer:SocketIOCommunicationLayer; // The underlying communication mechanism
     private clients:{[channelName:string]:ChannelCommunicationService} = {}; // Maps channel names to channel comms
 
     /**

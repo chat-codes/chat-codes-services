@@ -543,27 +543,12 @@ export class EditorState {
 export class EditorStateTracker extends EventEmitter {
     private editorStates:{[editorID:number]: EditorState} = {};
 	private currentTimestamp:number=CURRENT;
-	private socket:WebSocket = new WebSocket('ws://localhost:8080')
-	private connection = new ShareDB.Connection(this.socket);
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
 	}
 
-	public createEditor(id:string, contents:string, grammarName:string, modified:boolean):Promise<any> {
+	public createEditor(id:string, contents:string, grammarName:string, modified:boolean) {
 		this.channelCommunicationService.emitEditorOpened({ id, contents });
-		const doc = this.connection.get(this.channelCommunicationService.getChannelName(), id);
-		// const doc = this.connection.get('abc', 'def');
-		return new Promise<any>((resolve, reject) => {
-			console.log(doc);
-			doc.subscribe((err) => {
-				console.log(err);
-				if(err) {
-					reject(err);
-				} else {
-					resolve(doc);
-				}
-			});
-		});
 			//
             // this.commLayer.channelService.emitEditorOpened({
             //     id: id

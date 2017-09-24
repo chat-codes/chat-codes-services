@@ -23,16 +23,90 @@ function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):P
 		return JSON.parse(contents);
 	});
 }
+export class ChatCodesChannelServer {
+	private members:Set<WebSocket> = new Set<WebSocket>();
+	constructor(private sharedb, private wss, private channelName:string) {
+
+	}
+	public initialize():Promise<boolean> {
+		return Promise.all([this.getShareDBChat(), this.getShareDBUsers()]).then((result) => {
+			const [chat,users] = result;
+			console.log(chat);
+			return true;
+		});
+	}
+	public addMember(member:WebSocket) {
+		this.members.add(member);
+	}
+	public getChannelName():string { return this.channelName; };
+	private getShareDBChat():Promise<any> {
+		return new Promise((resolve, reject) => {
+			const connection = this.sharedb.connect();
+			const doc = connection.get(this.getChannelName(), 'chat');
+			const contents = {'key1': 'value1', 'key2': 'value2'};
+			doc.fetch((err) => {
+				if(err) {
+					reject(err);
+				} else if(doc.type === null) {
+					doc.create(contents, () => {
+						resolve(doc);
+					});
+				} else {
+					resolve(doc);
+				}
+			});
+		});
+	};
+
+	private getShareDBDoc(id:string, contents:string):Promise<any> {
+		return new Promise((resolve, reject) => {
+			const connection = this.sharedb.connect();
+			const doc = connection.get(this.getChannelName(), id);
+			doc.fetch((err) => {
+				if(err) {
+					reject(err);
+				} else if(doc.type === null) {
+					doc.create(contents, () => {
+						resolve(doc);
+					});
+				} else {
+					resolve(doc);
+				}
+			});
+		});
+	};
+
+	private getShareDBUsers():Promise<any> {
+		return new Promise((resolve, reject) => {
+			const connection = this.sharedb.connect();
+			const doc = connection.get(this.getChannelName(), 'users');
+			const contents = [];
+			doc.fetch((err) => {
+				if(err) {
+					reject(err);
+				} else if(doc.type === null) {
+					doc.create(contents, () => {
+						resolve(doc);
+					});
+				} else {
+					resolve(doc);
+				}
+			});
+		});
+	};
+}
 
 export class ChatCodesShareDBServer {
 	private db;
 	private sharedb;
+	private channels:Map<string, ChatCodesChannelServer> = new Map();
 	private app = express();
 	private server = http.createServer(this.app);
 	private wss = new WebSocket.Server( { server: this.server } );
 	constructor(private port:number, dbURL:string) {
 		this.db = ShareDBMongo('mongodb://localhost:27017/test');
-		this.sharedb = new ShareDB({ db: this.db });
+		// this.sharedb = new ShareDB({ db: this.db });
+		this.sharedb = new ShareDB({});
 
 		this.wss.on('connection', (socket) => {
 			this.handleConnection(socket);
@@ -43,8 +117,47 @@ export class ChatCodesShareDBServer {
 	};
 
 	private handleConnection(socket) {
-		socket.on('message', (dataString:string) => {
-			console.log(dataString);
+		const stream =  new WebSocketJSONStream(socket);
+		this.sharedb.listen(stream);
+
+		this.addSocketEventListener(socket, 'join-channel', (data, respond) => {
+			const {target, channel} = data;
+			let channelPromise;
+
+			if(!this.channels.has(channel)) {
+				const channelServer = new ChatCodesChannelServer(this.sharedb, this.wss, channel);
+				this.channels.set(channel, channelServer);
+				channelPromise = channelServer.initialize();
+			} else {
+				channelPromise = Promise.resolve(true);
+			}
+
+			const channelServer = this.channels.get(channel);
+			channelServer.addMember(target);
+
+			channelPromise.then(() => {
+				respond({
+					channel
+				});
+			});
+		});
+	};
+
+	private addSocketEventListener(socket, eventType, callback) {
+		socket.addEventListener('message', (event) => {
+			const data = JSON.parse(event.data);
+			if(data.type === eventType) {
+				const {responseID} = data;
+				if(responseID) {
+					callback(data, (responseData) => {
+						socket.send(JSON.stringify(_.extend({
+							responseID
+						}, responseData)));
+					});
+				} else {
+					callback(data);
+				}
+			}
 		});
 	};
 
@@ -67,42 +180,6 @@ export class ChatCodesShareDBServer {
 		});
 	};
 
-	private getShareDBUserList(channelName:string):Promise<any> {
-		return new Promise((resolve, reject) => {
-			const connection = this.sharedb.connect();
-			const doc = connection.get(channelName, 'members');
-			const contents = [];
-			doc.fetch((err) => {
-				if(err) {
-					reject(err);
-				} else if(doc.type === null) {
-					doc.create(contents, () => {
-						resolve(doc);
-					});
-				} else {
-					resolve(doc);
-				}
-			});
-		});
-	};
-
-	private getShareDBDoc(channelName:string, id:string, contents:string):Promise<any> {
-		return new Promise((resolve, reject) => {
-			const connection = this.sharedb.connect();
-			const doc = connection.get(channelName, id);
-			doc.fetch((err) => {
-				if(err) {
-					reject(err);
-				} else if(doc.type === null) {
-					doc.create(contents, () => {
-						resolve(doc);
-					});
-				} else {
-					resolve(doc);
-				}
-			});
-		});
-	};
 	destroy():void {
 		this.server.close();
 	};

@@ -29,9 +29,16 @@
         "showdown": "^1.7.3",
         "socket.io": "^2.0.3",
         "socket.io-client": "^2.0.3",
+        "tsify": "^3.0.3",
+        "typescript": "^2.5.2",
         "underscore": "^1.8.3",
         "websocket-json-stream": "0.0.3",
         "ws": "^3.2.0"
     },
-    "devDependencies": {}
+    "devDependencies": {
+        "browserify": "^14.4.0",
+        "bufferutil": "^3.0.2",
+        "pg-native": "^2.2.0",
+        "utf-8-validate": "^3.0.3"
+    }
 }

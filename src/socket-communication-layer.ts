@@ -1,10 +1,12 @@
 import { Manager, Socket } from 'socket.io-client';
 import { CommunicationLayer } from './communication-layer-interface';
+import * as sharedb from 'sharedb/lib/client';
 import * as _ from 'underscore';
 
 export class SocketIOCommunicationLayer implements CommunicationLayer {
 	private manager:Promise<SocketIOClient.Manager>;
 	private mainSocket:Promise<SocketIOClient.Socket>;
+	private wsConnectionPromise:Promise<sharedb.Connection>;
 	private namespaces:{[name:string]:any} = {};
 	private username:string;
 	constructor(private authInfo) {
@@ -14,6 +16,21 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		});
 		this.mainSocket = this.manager.then((manager) => {
 			return manager.socket('/');
+		});
+		this.wsConnectionPromise = new Promise<sharedb.Connection>((resolve, reject) => {
+			this.mainSocket.then((socket) => {
+				socket.on('connect', () => {
+					socket.once('connection-info', (info) => {
+						const {shareDBPort} = info;
+						const ws = new WebSocket(`ws://${authInfo.host}:${shareDBPort}`);
+						ws.addEventListener('open', function (event) {
+							const connection = new sharedb.Connection(ws);
+							connection.debug = true;
+							resolve(connection);
+						});
+					});
+				});
+			});
 		});
 	}
 	private getNamespaceAndHistory(name:string):Promise<any> {
@@ -60,6 +77,15 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			room.emit('data', eventName, eventContents);
 		});
 	};
+
+	public getShareDBChat(channelName):Promise<sharedb.Doc> {
+		return this.wsConnectionPromise.then((connection) => {
+			const doc = connection.get(channelName, 'chat');
+			console.log(doc);
+			return doc;
+		});
+	};
+
 	public bind(channelName:string, eventName:string, callback:(any)=>any):void {
 		this.getNamespaceAndHistory(channelName).then((data) => {
 			const {socket, listeners} = data;

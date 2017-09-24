@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const socket_io_client_1 = require("socket.io-client");
+const sharedb = require("sharedb/lib/client");
 const _ = require("underscore");
 class SocketIOCommunicationLayer {
     constructor(authInfo) {
@@ -12,6 +13,21 @@ class SocketIOCommunicationLayer {
         });
         this.mainSocket = this.manager.then((manager) => {
             return manager.socket('/');
+        });
+        this.wsConnectionPromise = new Promise((resolve, reject) => {
+            this.mainSocket.then((socket) => {
+                socket.on('connect', () => {
+                    socket.once('connection-info', (info) => {
+                        const { shareDBPort } = info;
+                        const ws = new WebSocket(`ws://${authInfo.host}:${shareDBPort}`);
+                        ws.addEventListener('open', function (event) {
+                            const connection = new sharedb.Connection(ws);
+                            connection.debug = true;
+                            resolve(connection);
+                        });
+                    });
+                });
+            });
         });
     }
     getNamespaceAndHistory(name) {
@@ -56,6 +72,14 @@ class SocketIOCommunicationLayer {
     trigger(channelName, eventName, eventContents) {
         this.getNamespace(channelName).then((room) => {
             room.emit('data', eventName, eventContents);
+        });
+    }
+    ;
+    getShareDBChat(channelName) {
+        return this.wsConnectionPromise.then((connection) => {
+            const doc = connection.get(channelName, 'chat');
+            console.log(doc);
+            return doc;
         });
     }
     ;
