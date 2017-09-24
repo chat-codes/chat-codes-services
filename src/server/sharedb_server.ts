@@ -43,7 +43,9 @@ export class ChatCodesShareDBServer {
 	};
 
 	private handleConnection(socket) {
-
+		socket.on('message', (dataString:string) => {
+			console.log(dataString);
+		});
 	};
 
 	private getShareDBChannelList():Promise<any> {

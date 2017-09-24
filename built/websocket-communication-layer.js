@@ -8,10 +8,17 @@ class WebSocketCommunicationLayer {
         this.namespaces = {};
         this.messageID = 1;
         this.username = authInfo.username;
-        this.ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
+        this.wsPromise = new Promise((resolve, reject) => {
+            const ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
+            ws.addEventListener('open', function (event) {
+                resolve(ws);
+            });
+        });
     }
     trigger(channel, event, payload) {
-        this.ws.send(JSON.stringify({ type: 'data', channel, event, payload }));
+        this.wsPromise.then((ws) => {
+            ws.send(JSON.stringify({ type: 'data', channel, event, payload }));
+        });
     }
     ;
     bind(channelName, eventName, callback) {
@@ -101,7 +108,9 @@ class WebSocketCommunicationLayer {
     // 	});
     // };
     wsSend(data) {
-        this.ws.send(JSON.stringify(data));
+        this.wsPromise.then((ws) => {
+            ws.send(JSON.stringify(data));
+        });
     }
     wsSendWithResponse(data) {
         return new Promise((resolve, reject) => {

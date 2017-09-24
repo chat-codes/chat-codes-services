@@ -3,16 +3,23 @@ import * as _ from 'underscore';
 // import * as WebSocket from 'ws';
 
 export class WebSocketCommunicationLayer implements CommunicationLayer {
-	private ws:WebSocket;
+	private wsPromise:Promise<WebSocket>;
 	private namespaces:{[name:string]:any} = {};
 	private username:string;
 	constructor(private authInfo) {
 		this.username = authInfo.username;
-		this.ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
+		this.wsPromise = new Promise<WebSocket>((resolve, reject) => {
+			const ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
+			ws.addEventListener('open', function (event) {
+				resolve(ws);
+			});
+		});
 	}
 
 	public trigger(channel:string, event:string, payload:any):void {
-		this.ws.send(JSON.stringify({ type: 'data', channel, event, payload }));
+		this.wsPromise.then((ws) => {
+			ws.send(JSON.stringify({ type: 'data', channel, event, payload }));
+		});
 	};
 	public bind(channelName:string, eventName:string, callback:(any)=>any):void {
 		// this.ws.addEventListener('message', (data:string) => {
@@ -98,7 +105,9 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 	// 	});
 	// };
 	private wsSend(data:any) {
-		this.ws.send(JSON.stringify(data));
+		this.wsPromise.then((ws) => {
+			ws.send(JSON.stringify(data));
+		});
 	}
 	private messageID:number=1;
 	private wsSendWithResponse(data):Promise<any> {

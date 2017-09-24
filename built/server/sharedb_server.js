@@ -38,6 +38,9 @@ class ChatCodesShareDBServer {
     }
     ;
     handleConnection(socket) {
+        socket.on('message', (dataString) => {
+            console.log(dataString);
+        });
     }
     ;
     getShareDBChannelList() {
