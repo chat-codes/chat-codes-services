@@ -65,9 +65,32 @@ class SocketIOCommunicationLayer {
     }
     ;
     getNamespace(name) {
-        return this.getNamespaceAndHistory(name).then((data) => {
-            return data.socket;
-        });
+        if (_.has(this.namespaces, name)) {
+            return this.namespaces[name];
+        }
+        else {
+            let socket;
+            this.namespaces[name] = this.mainSocket.then((socket) => {
+                return new Promise((resolve, reject) => {
+                    socket.emit('request-join-room', name, (response) => {
+                        resolve(response);
+                    });
+                });
+            }).then(() => {
+                return this.manager;
+            }).then((manager) => {
+                socket = manager.socket(`/${name}`);
+                return new Promise((resolve, reject) => {
+                    socket.on('connect', (event) => {
+                        socket.emit('set-username', this.username, (history) => {
+                            resolve(history);
+                        });
+                    });
+                });
+            }).then(() => {
+                return socket;
+            });
+        }
     }
     trigger(channelName, eventName, eventContents) {
         this.getNamespace(channelName).then((room) => {
@@ -78,7 +101,9 @@ class SocketIOCommunicationLayer {
     getShareDBChat(channelName) {
         return this.wsConnectionPromise.then((connection) => {
             const doc = connection.get(channelName, 'chat');
-            console.log(doc);
+            doc.subscribe(() => {
+                console.log(doc);
+            });
             return doc;
         });
     }
@@ -136,9 +161,11 @@ class SocketIOCommunicationLayer {
     }
     ;
     channelReady(channelName) {
-        return this.getNamespaceAndHistory(channelName).then((data) => {
-            return data.history;
+        return this.getNamespace(channelName).then((socket) => {
+            return this.getShareDBChat(channelName);
         });
+        // return this.getNamespaceAndHistory(channelName).then((data) => {
+        // });
     }
     ;
     destroy() {

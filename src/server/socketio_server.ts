@@ -32,9 +32,62 @@ export class ChatCodesChannelServer {
 		// console.log(this.ns);
 	}
 	public initialize():Promise<boolean> {
+		this.ns.on('connection', (s) => {
+			const {id} = s;
+			let dbid:number;
+			const member = {
+				id: id,
+				joined: (new Date()).getTime(),
+				left: -1,
+				info: {
+					name: null
+				}
+			};
+			this.members[id] = member;
+
+			s.on('set-username', (username:string, callback) => {
+				// member.info.name = username;
+				//
+				// let client:pg.Client;
+				// let channelID:number;
+				// Promise.all([dbChannelID, this.clientPromise]).then((result) => {
+				// 	channelID = result[0];
+				// 	client = result[1];
+				//
+				// 	console.log(`DB: Insert ${username} into users`);
+				// 	return client.query(`INSERT INTO users (uid, name, channel_id) VALUES ($1::text, $2::text, $3::integer) RETURNING id`, [id, username, channelID]);
+				// }).then((res) => {
+				// 	return res.rows[0].id;
+				// }).then((id:number) => {
+				// 	dbid = id;
+				// 	console.log(`DB: ${username} connected`);
+				// 	return client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, $3::timestamp, $4::text)`, [
+				// 			dbid, channelID, new Date(member.joined), 'connect'
+				// 	]);
+				// }).then(() => {
+				// 	return this.getChannelState(channelID);
+				// }).then((channelState) => {
+				// 	callback(_.extend({
+				// 		myID: id
+				// 	}, channelState));
+				// 	s.broadcast.emit('member-added', member);
+				// 	this.getChannelState(channelID);
+				// });
+				Promise.all([this.getShareDBChat()]).then((result) => {
+					const [chat] = result;
+					callback(_.extend({
+						myID: id
+					}));
+					return true;
+				});
+				console.log(`Client (${id} in ${this.getChannelName()}) set username to ${username}`);
+			});
+
+
+			console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
+		});
 		return Promise.all([this.getShareDBChat(), this.getShareDBUsers()]).then((result) => {
 			const [chat,users] = result;
-			console.log(chat);
 			return true;
 		});
 	}
@@ -45,8 +98,12 @@ export class ChatCodesChannelServer {
 	private getShareDBChat():Promise<any> {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
+			connection.debug = true;
 			const doc = connection.get(this.getChannelName(), 'chat');
-			const contents = {'key1': 'value1', 'key2': 'value2'};
+			const contents = {
+				'activeUsers': [],
+				'messages': []
+			};
 			doc.fetch((err) => {
 				if(err) {
 					reject(err);
@@ -58,6 +115,9 @@ export class ChatCodesChannelServer {
 					resolve(doc);
 				}
 			});
+		}).then((doc) => {
+			console.log(`Created chat for channel ${this.getChannelName()}`);
+			return doc;
 		});
 	};
 
@@ -139,6 +199,11 @@ export class ChatCodesSocketIOServer {
 		// this.sharedb = new ShareDB({ db: this.db });
 		this.sharedb = new ShareDB({});
 
+		this.wss.on('connection', (ws, req) => {
+			const stream = new WebSocketJSONStream(ws);
+			this.sharedb.listen(stream);
+		});
+
 		this.server.listen(this.shareDBPort);
 		console.log(`Created ShareDB server on port ${this.shareDBPort}`)
 	}
@@ -150,8 +215,10 @@ export class ChatCodesSocketIOServer {
 				shareDBPort: this.shareDBPort
 			});
 			socket.on('request-join-room', (roomName:string, callback) => {
-				this.getNamespace(roomName);
-				callback();
+				const channelServer = this.createNamespace(roomName);
+				channelServer.initialize().then(() => {
+					callback();
+				});
 				console.log(`Client (${id}) requested to join ${roomName}`);
 			});
 			socket.on('channel-available', (roomName:string, callback) => {
@@ -176,12 +243,12 @@ export class ChatCodesSocketIOServer {
 
 		console.log(`Created Socket.IO server on port ${this.socketIOPort}`);
 	}
-	private getNamespace(name:string): SocketIO.Namespace {
-		if(!_.has(this.namespaces, name)) {
-			this.namespaces[name] = this.createNamespace(name);
-		}
-		return this.namespaces[name];
-	};
+	// private getNamespace(name:string): SocketIO.Namespace {
+	// 	if(!_.has(this.namespaces, name)) {
+	// 		this.namespaces[name] = this.createNamespace(name);
+	// 	}
+	// 	return this.namespaces[name];
+	// };
 	private shouldLogData(eventType:string, data:any):boolean {
 		if(eventType === 'typing' || eventType === 'cursor-event') {
 			return false;
@@ -189,7 +256,7 @@ export class ChatCodesSocketIOServer {
 			return true;
 		}
 	};
-	private createNamespace(channelName:string):SocketIO.Namespace {
+	private createNamespace(channelName:string):ChatCodesChannelServer {
 		let channelPromise;
 		if(!this.channels.has(channelName)) {
 			const channelServer = new ChatCodesChannelServer(this.sharedb, this.wss, channelName, this.io);
@@ -200,6 +267,7 @@ export class ChatCodesSocketIOServer {
 		}
 
 		const channelServer = this.channels.get(channelName);
+		return channelServer;
 		// channelServer.addMember(target);
 		//
 		// channelPromise.then(() => {

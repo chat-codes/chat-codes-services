@@ -68,9 +68,31 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		}
 	};
 	private getNamespace(name:string):Promise<SocketIOClient.Socket> {
-		return this.getNamespaceAndHistory(name).then((data) => {
-			return data.socket;
-		});
+		if(_.has(this.namespaces, name)) {
+			return this.namespaces[name];
+		} else {
+			let socket:SocketIOClient.Socket;
+			this.namespaces[name] = this.mainSocket.then((socket) => {
+				return new Promise((resolve, reject) => {
+					socket.emit('request-join-room', name, (response) => {
+						resolve(response);
+					});
+				});
+			}).then(() => {
+				return this.manager;
+			}).then((manager) => {
+				socket = manager.socket(`/${name}`);
+				return new Promise<SocketIOClient.Socket>((resolve, reject) => {
+					socket.on('connect', (event) => {
+						socket.emit('set-username', this.username, (history) => {
+							resolve(history);
+						});
+					});
+				});
+			}).then(() => {
+				return socket;
+			});
+		}
 	}
 	public trigger(channelName:string, eventName:string, eventContents:any):void {
 		this.getNamespace(channelName).then((room) => {
@@ -81,7 +103,9 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 	public getShareDBChat(channelName):Promise<sharedb.Doc> {
 		return this.wsConnectionPromise.then((connection) => {
 			const doc = connection.get(channelName, 'chat');
-			console.log(doc);
+			doc.subscribe(() => {
+				console.log(doc);
+			})
 			return doc;
 		});
 	};
@@ -134,9 +158,11 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		});
 	};
 	public channelReady(channelName:string):Promise<any> {
-		return this.getNamespaceAndHistory(channelName).then((data) => {
-			return data.history;
+		return this.getNamespace(channelName).then((socket) => {
+			return this.getShareDBChat(channelName);
 		});
+		// return this.getNamespaceAndHistory(channelName).then((data) => {
+		// });
 	};
 	public destroy():void {
 		// this.manager.then((manager) => {
