@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const socket_communication_layer_1 = require("./socket-communication-layer");
@@ -73,11 +72,24 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         super();
         this.commService = commService;
         this.channelName = channelName;
-        this.userList = new chat_user_1.ChatUserList(); // A list of chat userList
         this._isRoot = false;
+        this.commLayer = commService.commLayer;
+        this.chatDoc = this.commLayer.getShareDBChat(this.getChannelName()).then((doc) => {
+            return new Promise((resolve, reject) => {
+                console.log("SUBSCRIBE");
+                doc.subscribe((err) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(doc);
+                    }
+                });
+            });
+        });
+        this.userList = new chat_user_1.ChatUserList(this.getMyID(), this);
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this, this.userList);
-        this.messageGroups = new chat_messages_1.MessageGroups(this.userList, this.editorStateTracker);
-        this.commLayer = commService.commLayer; // Pop this object up a level
+        this.messageGroups = new chat_messages_1.MessageGroups(this, this.userList, this.editorStateTracker);
         // Track when a user sends a message
         this.commLayer.bind(this.channelName, 'message', (data) => {
             // Forward the message to the messageGroups tracker
@@ -211,24 +223,31 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         //     user.setLeft(member.left);
         //     this.messageGroups.addDisconnectionMessage(user, user.getLeft());
         // });
-        this.commLayer.channelReady(this.channelName).then((history) => {
-            const { myID, data, users } = history;
-            this.myID = myID;
-            _.each(users, (u) => {
-                const user = this.userList.add(u.id === myID, u.id, u.name, u.joined, u.left, u.active);
-                this.messageGroups.addConnectionMessage(user, user.getJoined());
-                if (!user.isActive()) {
-                    this.messageGroups.addDisconnectionMessage(user, user.getLeft());
-                }
-            });
-            if (users.length === 1) {
-                this._isRoot = true;
-            }
+        this.commLayer.channelReady(this.channelName).then((shareDBDocs) => {
+            const [chatDoc] = shareDBDocs;
+            // const {myID, data, users} = history;
+            // this.myID = myID;
+            // _.each(users, (u:any) => {
+            //     const user = this.userList.add(u.id===myID, u.id, u.name, u.joined, u.left, u.active);
+            //     this.messageGroups.addConnectionMessage(user, user.getJoined());
+            //     if(!user.isActive()) {
+            //         this.messageGroups.addDisconnectionMessage(user, user.getLeft());
+            //     }
+            // });
+            // if(users.length === 1) { // I'm the only one here
+            //     this._isRoot = true;
+            // }
             // _.each(data, (h:any) => {
             //     const {eventName, payload} = h;
             //     this.commLayer.reTrigger(this.channelName, eventName, payload);
             // });
         });
+    }
+    getMyID() {
+        return this.commLayer.getMyID(this.getChannelName());
+    }
+    getShareDBChat() {
+        return this.chatDoc;
     }
     isRoot() {
         return this._isRoot;

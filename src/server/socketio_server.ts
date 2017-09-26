@@ -31,6 +31,14 @@ export class ChatCodesChannelServer {
 		this.getShareDBChat();
 		// console.log(this.ns);
 	}
+	private submitOp(doc, data, options?):Promise<ShareDB.Doc> {
+		return new Promise<ShareDB.Doc>((resolve, reject) => {
+			doc.submitOp(data, options, (err) => {
+				if(err) { reject(err); }
+				else { resolve(doc); }
+			})
+		});
+	}
 	public initialize():Promise<boolean> {
 		this.ns.on('connection', (s) => {
 			const {id} = s;
@@ -49,9 +57,10 @@ export class ChatCodesChannelServer {
 				member.info.name = username;
 				Promise.all([this.getShareDBChat()]).then((result) => {
 					const [chatDoc] = result;
-					chatDoc.submitOp([{p: ['activeUsers', id], oi: member}]);
-					chatDoc.submitOp([{p: ['allUsers', id], oi: member}]);
-
+					return this.submitOp(chatDoc, [{p: ['activeUsers', id], oi: member}]);
+				}).then((chatDoc) => {
+					return this.submitOp(chatDoc, [{p: ['allUsers', id], oi: member}]);
+				}).then((chatDoc) => {
 					callback({
 						myID: id
 					});

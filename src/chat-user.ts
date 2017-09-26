@@ -1,5 +1,6 @@
 import * as _ from 'underscore';
 import { EventEmitter } from 'events';
+import { ChannelCommunicationService } from './communication-service';
 
 /*
  * Represents a single chat user
@@ -50,8 +51,43 @@ export class ChatUserList extends EventEmitter {
     public allUsers:Array<ChatUser>=[];
     private current_user_color:number = 2;
     private numColors:number = 4;
-    constructor() {
+    private chatDocPromise:Promise<any>;
+    constructor(private myIDPromise:Promise<string>, private channelService:ChannelCommunicationService) {
         super();
+        this.chatDocPromise = this.channelService.getShareDBChat();
+        Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
+            const [doc, myID] = info;
+            _.each(doc.data.allUsers, (userInfo:any) => {
+                const {id, joined, left, info} = userInfo;
+                const {name} = info;
+
+                this.add(id === myID, id, name, joined, left, _.has(doc.data.activeUsers, id))
+            });
+            doc.on('op', (ops, source) => {
+                ops.forEach((op) => {
+                    const {p} = op;
+                    const [field] = p;
+                    console.log(op);
+                    if(field === 'activeUsers') {
+                        if(_.has(op, 'od')) {
+                            const {od} = op;
+                            const user = this.getUser(od.id);
+                            user.setLeft(od.left);
+                            this.remove(od.id);
+                        }
+
+                        if(_.has(op, 'oi')) {
+                            const {oi} = op;
+
+                            const {id, joined, left, info} = oi;
+                            const {name} = info;
+
+                            this.add(id === myID, id, name, joined, left, _.has(doc.data.activeUsers, id))
+                        }
+                    }
+                });
+            });
+        });
     }
     public getUsers():Array<ChatUser> {
         return this.activeUsers;

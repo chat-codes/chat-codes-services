@@ -1,5 +1,5 @@
-
 import * as _ from 'underscore';
+import * as sharedb from 'sharedb/lib/client';
 import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { SocketIOCommunicationLayer } from './socket-communication-layer';
@@ -71,13 +71,13 @@ function generateChannelName(commLayer):Promise<string> {
 }
 
 export class ChannelCommunicationService extends EventEmitter {
-    public userList:ChatUserList = new ChatUserList(); // A list of chat userList
+    public userList:ChatUserList; // A list of chat userList
     public messageGroups:MessageGroups // A list of message groups
-    public commLayer:CommunicationLayer; // The communication channel
     public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
     private _isRoot:boolean=false;
-
+    private chatDoc:Promise<sharedb.Doc>;
+    private commLayer:SocketIOCommunicationLayer;
     /**
      * [constructor description]
      * @param  {CommunicationService} privatecommService The CommunicationService object that created this instance
@@ -86,10 +86,24 @@ export class ChannelCommunicationService extends EventEmitter {
      */
     constructor(private commService:CommunicationService, private channelName:string, EditorWrapperClass) {
         super();
-        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
-        this.messageGroups = new MessageGroups(this.userList, this.editorStateTracker);
+        this.commLayer = commService.commLayer;
 
-        this.commLayer = commService.commLayer; // Pop this object up a level
+        this.chatDoc = this.commLayer.getShareDBChat(this.getChannelName()).then((doc) => {
+            return new Promise((resolve, reject) => {
+                console.log("SUBSCRIBE");
+                doc.subscribe((err) => {
+                    if(err) {
+                        reject(err);
+                    } else {
+                        resolve(doc);
+                    }
+                });
+            });
+        });
+
+        this.userList = new ChatUserList(this.getMyID(), this);
+        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
+        this.messageGroups = new MessageGroups(this, this.userList, this.editorStateTracker);
 
 
         // Track when a user sends a message
@@ -237,24 +251,31 @@ export class ChannelCommunicationService extends EventEmitter {
         //     this.messageGroups.addDisconnectionMessage(user, user.getLeft());
         // });
 
-        this.commLayer.channelReady(this.channelName).then((history) => {
-            const {myID, data, users} = history;
-            this.myID = myID;
-            _.each(users, (u:any) => {
-                const user = this.userList.add(u.id===myID, u.id, u.name, u.joined, u.left, u.active);
-                this.messageGroups.addConnectionMessage(user, user.getJoined());
-                if(!user.isActive()) {
-                    this.messageGroups.addDisconnectionMessage(user, user.getLeft());
-                }
-            });
-            if(users.length === 1) { // I'm the only one here
-                this._isRoot = true;
-            }
+        this.commLayer.channelReady(this.channelName).then((shareDBDocs) => {
+            const [chatDoc] = shareDBDocs;
+            // const {myID, data, users} = history;
+            // this.myID = myID;
+            // _.each(users, (u:any) => {
+            //     const user = this.userList.add(u.id===myID, u.id, u.name, u.joined, u.left, u.active);
+            //     this.messageGroups.addConnectionMessage(user, user.getJoined());
+            //     if(!user.isActive()) {
+            //         this.messageGroups.addDisconnectionMessage(user, user.getLeft());
+            //     }
+            // });
+            // if(users.length === 1) { // I'm the only one here
+            //     this._isRoot = true;
+            // }
             // _.each(data, (h:any) => {
             //     const {eventName, payload} = h;
             //     this.commLayer.reTrigger(this.channelName, eventName, payload);
             // });
         });
+    }
+	public getMyID():Promise<string> {
+        return this.commLayer.getMyID(this.getChannelName());
+	}
+    public getShareDBChat():Promise<sharedb.Doc> {
+        return this.chatDoc;
     }
     private isRoot():boolean {
         return this._isRoot;

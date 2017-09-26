@@ -25,7 +25,6 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 						const ws = new WebSocket(`ws://${authInfo.host}:${shareDBPort}`);
 						ws.addEventListener('open', function (event) {
 							const connection = new sharedb.Connection(ws);
-							connection.debug = true;
 							resolve(connection);
 						});
 					});
@@ -72,7 +71,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			return this.namespaces[name];
 		} else {
 			let socket:SocketIOClient.Socket;
-			this.namespaces[name] = this.mainSocket.then((socket) => {
+			return this.namespaces[name] = this.mainSocket.then((socket) => {
 				return new Promise((resolve, reject) => {
 					socket.emit('request-join-room', name, (response) => {
 						resolve(response);
@@ -94,6 +93,11 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			});
 		}
 	}
+	public getMyID(channelName:string):Promise<string> {
+		return this.getNamespace(channelName).then((socket) => {
+			return socket.id;
+		});
+	}
 	public trigger(channelName:string, eventName:string, eventContents:any):void {
 		this.getNamespace(channelName).then((room) => {
 			room.emit('data', eventName, eventContents);
@@ -103,21 +107,17 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 	public getShareDBChat(channelName):Promise<sharedb.Doc> {
 		return this.wsConnectionPromise.then((connection) => {
 			const doc = connection.get(channelName, 'chat');
-			doc.subscribe(() => {
-				console.log(doc);
-			})
 			return doc;
 		});
 	};
 
 	public bind(channelName:string, eventName:string, callback:(any)=>any):void {
-		this.getNamespaceAndHistory(channelName).then((data) => {
-			const {socket, listeners} = data;
-			if(_.has(listeners, eventName)) {
-				listeners[eventName].push(callback);
-			} else {
-				listeners[eventName] = [callback];
-			}
+		this.getNamespace(channelName).then((socket) => {
+			// if(_.has(listeners, eventName)) {
+			// 	listeners[eventName].push(callback);
+			// } else {
+			// 	listeners[eventName] = [callback];
+			// }
 
 			socket.on(`data-${eventName}`, callback);
 			// (val) => {
@@ -159,21 +159,11 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 	};
 	public channelReady(channelName:string):Promise<any> {
 		return this.getNamespace(channelName).then((socket) => {
-			return this.getShareDBChat(channelName);
+			return Promise.all([this.getShareDBChat(channelName)]);
 		});
-		// return this.getNamespaceAndHistory(channelName).then((data) => {
-		// });
 	};
 	public destroy():void {
 		// this.manager.then((manager) => {
 		// });
 	};
-	public reTrigger(channelName:string, eventName:string, payload):void {
-		this.getNamespaceAndHistory(channelName).then((data) => {
-			const {listeners} = data;
-			_.each(listeners[eventName], (callback:any) => {
-				callback(payload);
-			})
-		});
-	}
 }

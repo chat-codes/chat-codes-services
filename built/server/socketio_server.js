@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -36,6 +35,18 @@ class ChatCodesChannelServer {
         this.getShareDBChat();
         // console.log(this.ns);
     }
+    submitOp(doc, data, options) {
+        return new Promise((resolve, reject) => {
+            doc.submitOp(data, options, (err) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(doc);
+                }
+            });
+        });
+    }
     initialize() {
         this.ns.on('connection', (s) => {
             const { id } = s;
@@ -53,8 +64,10 @@ class ChatCodesChannelServer {
                 member.info.name = username;
                 Promise.all([this.getShareDBChat()]).then((result) => {
                     const [chatDoc] = result;
-                    chatDoc.submitOp([{ p: ['activeUsers', id], oi: member }]);
-                    chatDoc.submitOp([{ p: ['allUsers', id], oi: member }]);
+                    return this.submitOp(chatDoc, [{ p: ['activeUsers', id], oi: member }]);
+                }).then((chatDoc) => {
+                    return this.submitOp(chatDoc, [{ p: ['allUsers', id], oi: member }]);
+                }).then((chatDoc) => {
                     callback({
                         myID: id
                     });

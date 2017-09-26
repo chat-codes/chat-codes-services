@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
 /*
@@ -60,12 +59,44 @@ class ChatUser extends events_1.EventEmitter {
 }
 exports.ChatUser = ChatUser;
 class ChatUserList extends events_1.EventEmitter {
-    constructor() {
+    constructor(myIDPromise, channelService) {
         super();
+        this.myIDPromise = myIDPromise;
+        this.channelService = channelService;
         this.activeUsers = [];
         this.allUsers = [];
         this.current_user_color = 2;
         this.numColors = 4;
+        this.chatDocPromise = this.channelService.getShareDBChat();
+        Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
+            const [doc, myID] = info;
+            _.each(doc.data.allUsers, (userInfo) => {
+                const { id, joined, left, info } = userInfo;
+                const { name } = info;
+                this.add(id === myID, id, name, joined, left, _.has(doc.data.activeUsers, id));
+            });
+            doc.on('op', (ops, source) => {
+                ops.forEach((op) => {
+                    const { p } = op;
+                    const [field] = p;
+                    console.log(op);
+                    if (field === 'activeUsers') {
+                        if (_.has(op, 'od')) {
+                            const { od } = op;
+                            const user = this.getUser(od.id);
+                            user.setLeft(od.left);
+                            this.remove(od.id);
+                        }
+                        if (_.has(op, 'oi')) {
+                            const { oi } = op;
+                            const { id, joined, left, info } = oi;
+                            const { name } = info;
+                            this.add(id === myID, id, name, joined, left, _.has(doc.data.activeUsers, id));
+                        }
+                    }
+                });
+            });
+        });
     }
     getUsers() {
         return this.activeUsers;

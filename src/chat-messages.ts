@@ -1,6 +1,7 @@
 import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
 import { EditorStateTracker, UndoableDelta, EditDelta, EditorState } from './editor-state-tracker';
+import { ChannelCommunicationService } from './communication-service';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
 import * as difflib from 'difflib';
@@ -299,7 +300,7 @@ export class ConnectionMessageGroup extends Group<ConnectionMessage> {
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
 export class MessageGroups extends EventEmitter {
-	constructor(private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
+	constructor(private channelService:ChannelCommunicationService, private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
 		super();
 	};
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
