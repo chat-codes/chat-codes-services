@@ -50,41 +50,23 @@ class ChatCodesChannelServer {
             };
             this.members[id] = member;
             s.on('set-username', (username, callback) => {
-                // member.info.name = username;
-                //
-                // let client:pg.Client;
-                // let channelID:number;
-                // Promise.all([dbChannelID, this.clientPromise]).then((result) => {
-                // 	channelID = result[0];
-                // 	client = result[1];
-                //
-                // 	console.log(`DB: Insert ${username} into users`);
-                // 	return client.query(`INSERT INTO users (uid, name, channel_id) VALUES ($1::text, $2::text, $3::integer) RETURNING id`, [id, username, channelID]);
-                // }).then((res) => {
-                // 	return res.rows[0].id;
-                // }).then((id:number) => {
-                // 	dbid = id;
-                // 	console.log(`DB: ${username} connected`);
-                // 	return client.query(`INSERT INTO user_connections(user_id, channel_id, time, action) VALUES ($1::integer, $2::integer, $3::timestamp, $4::text)`, [
-                // 			dbid, channelID, new Date(member.joined), 'connect'
-                // 	]);
-                // }).then(() => {
-                // 	return this.getChannelState(channelID);
-                // }).then((channelState) => {
-                // 	callback(_.extend({
-                // 		myID: id
-                // 	}, channelState));
-                // 	s.broadcast.emit('member-added', member);
-                // 	this.getChannelState(channelID);
-                // });
+                member.info.name = username;
                 Promise.all([this.getShareDBChat()]).then((result) => {
-                    const [chat] = result;
-                    callback(_.extend({
+                    const [chatDoc] = result;
+                    chatDoc.submitOp([{ p: ['activeUsers', id], oi: member }]);
+                    chatDoc.submitOp([{ p: ['allUsers', id], oi: member }]);
+                    callback({
                         myID: id
-                    }));
-                    return true;
+                    });
                 });
                 console.log(`Client (${id} in ${this.getChannelName()}) set username to ${username}`);
+            });
+            s.on('disconnect', () => {
+                Promise.all([this.getShareDBChat()]).then((result) => {
+                    const [chatDoc] = result;
+                    chatDoc.submitOp([{ p: ['allUsers', id], od: member }]);
+                    ;
+                });
             });
             console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
         });
@@ -104,7 +86,8 @@ class ChatCodesChannelServer {
             connection.debug = true;
             const doc = connection.get(this.getChannelName(), 'chat');
             const contents = {
-                'activeUsers': [],
+                'activeUsers': {},
+                'allUsers': {},
                 'messages': []
             };
             doc.fetch((err) => {

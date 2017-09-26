@@ -3,7 +3,6 @@ import * as _ from 'underscore';
 import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { SocketIOCommunicationLayer } from './socket-communication-layer';
-import { WebSocketCommunicationLayer } from './websocket-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
 import { UndoableDelta, EditorStateTracker, EditorState } from './editor-state-tracker';
