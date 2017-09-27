@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
@@ -534,7 +535,11 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.currentTimestamp = CURRENT;
     }
     createEditor(id, contents, grammarName, modified) {
-        this.channelCommunicationService.emitEditorOpened({ id, contents });
+        this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+            const data = { id, contents, grammarName, modified };
+            // editorDoc.
+        });
+        // this.channelCommunicationService.emitEditorOpened({ id, contents });
         //
         // this.commLayer.channelService.emitEditorOpened({
         //     id: id

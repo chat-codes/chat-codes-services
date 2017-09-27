@@ -39,18 +39,22 @@ export class ChatCodesChannelServer {
 			})
 		});
 	}
+	private static NUM_COLORS:number = 4;
+	private colorIndex:number = 0;
 	public initialize():Promise<boolean> {
 		this.ns.on('connection', (s) => {
 			const {id} = s;
 			let dbid:number;
 			const member = {
 				id: id,
-				joined: (new Date()).getTime(),
+				joined: this.getTimestamp(),
 				left: -1,
 				info: {
-					name: null
+					name: null,
+					colorIndex: this.colorIndex+1
 				}
 			};
+			this.colorIndex = (this.colorIndex+1)%ChatCodesChannelServer.NUM_COLORS;
 			this.members[id] = member;
 
 			s.on('set-username', (username:string, callback) => {
@@ -61,6 +65,13 @@ export class ChatCodesChannelServer {
 				}).then((chatDoc) => {
 					return this.submitOp(chatDoc, [{p: ['allUsers', id], oi: member}]);
 				}).then((chatDoc) => {
+					const userJoin = {
+						uid: id,
+						type: 'join',
+						timestamp: this.getTimestamp()
+					};
+					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data.messages.length], li: userJoin}]);
+				}).then((chatDoc) => {
 					callback({
 						myID: id
 					});
@@ -69,20 +80,27 @@ export class ChatCodesChannelServer {
 			});
 
 			s.on('disconnect', () => {
-				Promise.all([this.getShareDBChat()]).then((result) => {
-					const [chatDoc] = result;
-					chatDoc.submitOp([{p: ['allUsers', id], od: member}]);;
+				const timestamp = this.getTimestamp();
+				Promise.all([this.getShareDBChat(), this.getShareDBEditors()]).then(([chatDoc, editors]) => {
+					const userLeft = {
+						uid: id,
+						type: 'left',
+						timestamp: timestamp
+					};
+					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data.messages.length], li: userLeft}]);
+				}).then((chatDoc) => {
+					member.left = this.getTimestamp();
+					chatDoc.submitOp([{p: ['activeUsers', id], od: member}]);;
 				});
 			});
 
-
 			console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
 		});
-		return Promise.all([this.getShareDBChat(), this.getShareDBUsers()]).then((result) => {
-			const [chat,users] = result;
+		return Promise.all([this.getShareDBChat(), this.getShareDBEditors()]).then(([chatDoc, editors]) => {
 			return true;
 		});
 	}
+	private getTimestamp():number { return (new Date()).getTime(); };
 	public addMember(member:WebSocket) {
 		this.members.add(member);
 	}
@@ -113,11 +131,12 @@ export class ChatCodesChannelServer {
 			return doc;
 		});
 	};
-
-	private getShareDBDoc(id:string, contents:string):Promise<any> {
+	private getShareDBEditors():Promise<any> {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
-			const doc = connection.get(this.getChannelName(), id);
+			connection.debug = true;
+			const doc = connection.get(this.getChannelName(), 'chat');
+			const contents = { };
 			doc.fetch((err) => {
 				if(err) {
 					reject(err);
@@ -129,14 +148,16 @@ export class ChatCodesChannelServer {
 					resolve(doc);
 				}
 			});
+		}).then((doc) => {
+			console.log(`Created editors for channel ${this.getChannelName()}`);
+			return doc;
 		});
 	};
 
-	private getShareDBUsers():Promise<any> {
+	private getShareDBDoc(id:string, contents:string):Promise<any> {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
-			const doc = connection.get(this.getChannelName(), 'users');
-			const contents = [];
+			const doc = connection.get(this.getChannelName(), id);
 			doc.fetch((err) => {
 				if(err) {
 					reject(err);

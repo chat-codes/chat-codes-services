@@ -5,6 +5,7 @@ import { ChannelCommunicationService } from './communication-service';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
 import * as difflib from 'difflib';
+import * as ShareDB from 'sharedb/lib/client';
 
 function tstamp(x:number|Timestamped):number {
 	if(typeof(x) === typeof(1)) {
@@ -302,7 +303,9 @@ export class ConnectionMessageGroup extends Group<ConnectionMessage> {
 export class MessageGroups extends EventEmitter {
 	constructor(private channelService:ChannelCommunicationService, private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
 		super();
+        this.chatDocPromise = this.channelService.getShareDBChat();
 	};
+    private chatDocPromise:Promise<ShareDB.Doc>;
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
 	private messageGroups: Array<Group<TextMessage|UndoableDelta|ConnectionMessage>> = [];
 	private messages:Array<any> = [];

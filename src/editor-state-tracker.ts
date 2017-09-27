@@ -548,7 +548,11 @@ export class EditorStateTracker extends EventEmitter {
 	}
 
 	public createEditor(id:string, contents:string, grammarName:string, modified:boolean) {
-		this.channelCommunicationService.emitEditorOpened({ id, contents });
+		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+			const data = { id, contents, grammarName, modified };
+			// editorDoc.
+		});
+		// this.channelCommunicationService.emitEditorOpened({ id, contents });
 			//
             // this.commLayer.channelService.emitEditorOpened({
             //     id: id

@@ -1,8 +1,9 @@
+"use strict";
 /**
  * This file provides a communication layer that is built on the [Pusher](https://pusher.com) service. This code implements throttling,
  * automatically splits long messages into multiple messages, and automatically combines larger messages.
  */
-"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const Pusher = require("pusher-js");
 const _ = require("underscore");
 const url_1 = require("url");

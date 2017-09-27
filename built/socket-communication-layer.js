@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const socket_io_client_1 = require("socket.io-client");
 const sharedb = require("sharedb/lib/client");
 const _ = require("underscore");
@@ -101,9 +102,9 @@ class SocketIOCommunicationLayer {
         });
     }
     ;
-    getShareDBChat(channelName) {
+    getShareDBObject(path, channelName) {
         return this.wsConnectionPromise.then((connection) => {
-            const doc = connection.get(channelName, 'chat');
+            const doc = connection.get(channelName, path);
             return doc;
         });
     }
@@ -159,9 +160,7 @@ class SocketIOCommunicationLayer {
     }
     ;
     channelReady(channelName) {
-        return this.getNamespace(channelName).then((socket) => {
-            return Promise.all([this.getShareDBChat(channelName)]);
-        });
+        return this.getNamespace(channelName);
     }
     ;
     destroy() {

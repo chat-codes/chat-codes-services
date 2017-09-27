@@ -104,9 +104,9 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		});
 	};
 
-	public getShareDBChat(channelName):Promise<sharedb.Doc> {
+	public getShareDBObject(path:string, channelName:string):Promise<sharedb.Doc> {
 		return this.wsConnectionPromise.then((connection) => {
-			const doc = connection.get(channelName, 'chat');
+			const doc = connection.get(channelName, path);
 			return doc;
 		});
 	};
@@ -158,9 +158,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		});
 	};
 	public channelReady(channelName:string):Promise<any> {
-		return this.getNamespace(channelName).then((socket) => {
-			return Promise.all([this.getShareDBChat(channelName)]);
-		});
+		return this.getNamespace(channelName);
 	};
 	public destroy():void {
 		// this.manager.then((manager) => {

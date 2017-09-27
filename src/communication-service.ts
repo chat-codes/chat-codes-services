@@ -77,6 +77,7 @@ export class ChannelCommunicationService extends EventEmitter {
     private myID:string; // The ID assigned to this user
     private _isRoot:boolean=false;
     private chatDoc:Promise<sharedb.Doc>;
+    private editorsDoc:Promise<sharedb.Doc>;
     private commLayer:SocketIOCommunicationLayer;
     /**
      * [constructor description]
@@ -88,9 +89,19 @@ export class ChannelCommunicationService extends EventEmitter {
         super();
         this.commLayer = commService.commLayer;
 
-        this.chatDoc = this.commLayer.getShareDBChat(this.getChannelName()).then((doc) => {
+        this.chatDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'chat').then((doc) => {
             return new Promise((resolve, reject) => {
-                console.log("SUBSCRIBE");
+                doc.subscribe((err) => {
+                    if(err) {
+                        reject(err);
+                    } else {
+                        resolve(doc);
+                    }
+                });
+            });
+        });
+        this.editorsDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'editors').then((doc) => {
+            return new Promise((resolve, reject) => {
                 doc.subscribe((err) => {
                     if(err) {
                         reject(err);
@@ -105,44 +116,6 @@ export class ChannelCommunicationService extends EventEmitter {
         this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new MessageGroups(this, this.userList, this.editorStateTracker);
 
-
-        // Track when a user sends a message
-        this.commLayer.bind(this.channelName, 'message', (data) => {
-            // Forward the message to the messageGroups tracker
-            this.messageGroups.addTextMessage(data);
-            (this as any).emit('message', _.extend({
-                sender: this.userList.getUser(data.uid)
-            }, data));
-        });
-
-        // this.commLayer.bind(this.channelName, 'history', (data) => {
-        //     if(data.forUser === this.myID) {
-        //         const {editorState, allUsers, messageHistory} = data;
-        //         // Add every user from the past to our list
-        //         allUsers.forEach((u) => {
-        //             this.userList.add(false, u.id, u.name, u.active);
-        //         });
-        //
-        //         _.each(editorState, (serializedEditorState) => {
-        //             const editorState:EditorState = this.editorStateTracker.onEditorOpened(serializedEditorState, true);
-        //             _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
-        //                 this.messageGroups.addDelta(delta);
-        //             });
-        //         });
-        //         (this as any).emit('editor-state', data);
-        //
-        //         _.each(messageHistory, (m:any) => {
-        //             this.messageGroups.addTextMessage(m);
-        //             (this as any).emit('message', _.extend({
-        //                 sender: this.userList.getUser(m.uid)
-        //             }, m));
-        //         });
-        //         (this as any).emit('history', {
-        //             userList: this.userList,
-        //             editorState: this.editorStateTracker
-        //         });
-        //     }
-        // });
 
         // Track when users are typing
     	this.commLayer.bind(this.channelName, 'typing', (data) => {
@@ -205,77 +178,15 @@ export class ChannelCommunicationService extends EventEmitter {
             });
             (this as any).emit('editor-opened', data);
     	});
-
-        // The user wants to write something to the terminal
-        this.commLayer.bind(this.channelName, 'write-to-terminal', (data) => {
-            (this as any).emit('write-to-terminal', data);
-        });
-
-        // The terminal outputted something
-        this.commLayer.bind(this.channelName, 'terminal-data', (event) => {
-            (this as any).emit('terminal-data', event);
-        });
-
-        // Someone requested the conversation & editor history
-        // this.commLayer.bind(this.channelName, 'request-history', (memberID:string) => {
-        //     // If I'm root, then send over the current editor state and past message history to every new user
-        //     if(this.isRoot()) {
-        //         this.commLayer.trigger(this.channelName, 'history', {
-        //             forUser: memberID,
-        //             editorState: this.editorStateTracker.serializeEditorStates(),
-        //             allUsers: this.userList.serialize(),
-        //             messageHistory: this.messageGroups.getMessageHistory()
-        //         });
-        //     }
-        // });
-
-        // Add every current member to the user list
-        // this.commLayer.getMembers(this.channelName).then((memberInfo:any) => {
-        //     if(_.keys(memberInfo.members).length === 1) { // I'm the only one here
-        //         this._isRoot = true;
-        //     }
-        //     this.myID = memberInfo.myID;
-        //     this.userList.addAll(memberInfo);
-        //     this.commLayer.trigger(this.channelName, 'request-history', this.myID);
-        // });
-
-        // this.commLayer.onMemberAdded(this.channelName, (member) => {
-        //     const memberID = member.id;
-        //     const user = this.userList.add(false, memberID, member.info.name, member.joined, member.left);
-        //     this.messageGroups.addConnectionMessage(user, user.getJoined());
-        // });
-        // this.commLayer.onMemberRemoved(this.channelName, (member) => {
-        //     this.editorStateTracker.removeUserCursors(member);
-        //     const user = this.userList.remove(member.id);
-        //     user.setLeft(member.left);
-        //     this.messageGroups.addDisconnectionMessage(user, user.getLeft());
-        // });
-
-        this.commLayer.channelReady(this.channelName).then((shareDBDocs) => {
-            const [chatDoc] = shareDBDocs;
-            // const {myID, data, users} = history;
-            // this.myID = myID;
-            // _.each(users, (u:any) => {
-            //     const user = this.userList.add(u.id===myID, u.id, u.name, u.joined, u.left, u.active);
-            //     this.messageGroups.addConnectionMessage(user, user.getJoined());
-            //     if(!user.isActive()) {
-            //         this.messageGroups.addDisconnectionMessage(user, user.getLeft());
-            //     }
-            // });
-            // if(users.length === 1) { // I'm the only one here
-            //     this._isRoot = true;
-            // }
-            // _.each(data, (h:any) => {
-            //     const {eventName, payload} = h;
-            //     this.commLayer.reTrigger(this.channelName, eventName, payload);
-            // });
-        });
     }
 	public getMyID():Promise<string> {
         return this.commLayer.getMyID(this.getChannelName());
 	}
     public getShareDBChat():Promise<sharedb.Doc> {
         return this.chatDoc;
+    }
+    public getShareDBEditors():Promise<sharedb.Doc> {
+        return this.editorsDoc;
     }
     private isRoot():boolean {
         return this._isRoot;
@@ -318,19 +229,15 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {string} message The text of the message to send
      */
     public sendTextMessage(message:string):void {
-        const data = {
-            uid: this.myID,
-            type: 'text',
-            message: message,
-            timestamp: this.getTimestamp()
-        };
-        this.messageGroups.addTextMessage(data);
-
-        this.commLayer.trigger(this.channelName, 'message', data);
-
-        (this as any).emit('message', _.extend({
-            sender: this.userList.getMe()
-        }, data));
+        Promise.all([this.getMyID(), this.getShareDBChat()]).then(([myID, doc]) => {
+            const data = {
+                uid: myID,
+                type: 'text',
+                message: message,
+                timestamp: this.getTimestamp()
+            };
+			doc.submitOp([{p: ['messages', doc.data.messages.length], li: data}]);
+        });
     }
 
     /**

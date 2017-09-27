@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
@@ -326,6 +327,7 @@ class MessageGroups extends events_1.EventEmitter {
         this.messageGroupingTimeThreshold = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
         this.messageGroups = [];
         this.messages = [];
+        this.chatDocPromise = this.channelService.getShareDBChat();
     }
     ;
     getMessageHistory() {

@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
 /*
@@ -13,12 +14,11 @@ class ChatUser extends events_1.EventEmitter {
      * @param  {boolean} active     Whether this user is currently in the channel
      * @param  {number}  colorIndex The user's color
      */
-    constructor(isMe, id, name, active, joined, left, colorIndex) {
+    constructor(isMe, id, name, joined, left, colorIndex) {
         super();
         this.isMe = isMe;
         this.id = id;
         this.name = name;
-        this.active = active;
         this.joined = joined;
         this.left = left;
         this.colorIndex = colorIndex;
@@ -26,14 +26,12 @@ class ChatUser extends events_1.EventEmitter {
     }
     getIsMe() { return this.isMe; }
     ;
-    isActive() { return this.active; }
-    ;
+    // public isActive():boolean { return this.active; };
     getID() { return this.id; }
     getName() { return this.name; }
     getColorIndex() { return this.colorIndex; }
     ;
-    setIsActive(active) { this.active = active; }
-    ;
+    // public setIsActive(active:boolean):void { this.active = active; };
     getTypingStatus() { return this.typingStatus; }
     ;
     setLeft(ts) { this.left = ts; }
@@ -52,8 +50,8 @@ class ChatUser extends events_1.EventEmitter {
         return {
             id: this.id,
             name: this.name,
-            typingStatus: this.typingStatus,
-            active: this.active
+            typingStatus: this.typingStatus
+            // active: this.active
         };
     }
 }
@@ -63,107 +61,84 @@ class ChatUserList extends events_1.EventEmitter {
         super();
         this.myIDPromise = myIDPromise;
         this.channelService = channelService;
-        this.activeUsers = [];
-        this.allUsers = [];
-        this.current_user_color = 2;
-        this.numColors = 4;
+        this.activeUsers = new Map();
+        this.allUsers = new Map();
         this.chatDocPromise = this.channelService.getShareDBChat();
         Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
             const [doc, myID] = info;
-            _.each(doc.data.allUsers, (userInfo) => {
-                const { id, joined, left, info } = userInfo;
-                const { name } = info;
-                this.add(id === myID, id, name, joined, left, _.has(doc.data.activeUsers, id));
+            _.each(doc.data.allUsers, (oi) => {
+                this.allUsers.set(oi.id, this.createUser(oi, myID));
+            });
+            _.each(doc.data.activeUsers, (oi) => {
+                this.activeUsers.set(oi.id, this.createUser(oi, myID));
             });
             doc.on('op', (ops, source) => {
                 ops.forEach((op) => {
                     const { p } = op;
                     const [field] = p;
-                    console.log(op);
-                    if (field === 'activeUsers') {
-                        if (_.has(op, 'od')) {
-                            const { od } = op;
-                            const user = this.getUser(od.id);
-                            user.setLeft(od.left);
-                            this.remove(od.id);
+                    if (field === 'activeUsers' || field === 'allUsers') {
+                        const userMap = field === 'activeUsers' ? this.activeUsers : this.allUsers;
+                        if (_.has(op, 'od') && _.has(op, 'oi')) {
+                            const { od, oi } = op;
+                            if (od.id !== oi.id) {
+                                const addedUser = this.createUser(oi, myID);
+                                userMap.delete(od.id);
+                                this.emit('userRemoved', {
+                                    id: od.id
+                                });
+                                userMap.set(oi.id, addedUser);
+                                this.emit('userAdded', {
+                                    user: addedUser
+                                });
+                            }
                         }
-                        if (_.has(op, 'oi')) {
+                        else if (_.has(op, 'od')) {
+                            const { od } = op;
+                            const { id } = od;
+                            userMap.delete(id);
+                            this.emit('userRemoved', {
+                                id: id
+                            });
+                        }
+                        else if (_.has(op, 'oi')) {
                             const { oi } = op;
-                            const { id, joined, left, info } = oi;
-                            const { name } = info;
-                            this.add(id === myID, id, name, joined, left, _.has(doc.data.activeUsers, id));
+                            const addedUser = this.createUser(oi, myID);
+                            userMap.set(oi.id, addedUser);
+                            this.emit('userAdded', {
+                                user: addedUser
+                            });
                         }
                     }
                 });
             });
         });
     }
-    getUsers() {
-        return this.activeUsers;
-    }
-    // public addAll(memberInfo):void {
-    //     const myID = memberInfo.myID;
-    //     _.each(memberInfo.members, (memberInfo:any, id:string) => {
-    //         this.add(id===myID, id, memberInfo.name);
-    //     });
-    // }
-    add(isMe, id, name, joined, left, active = true) {
-        let user = this.getUser(id);
-        if (user === null) {
-            const colorIndex = isMe ? 1 : this.current_user_color;
-            this.current_user_color = 2 + ((this.current_user_color + 1) % this.numColors);
-            user = new ChatUser(isMe, id, name, active, joined, left, colorIndex);
-            if (active) {
-                this.activeUsers.push(user);
-            }
-            this.allUsers.push(user);
-            this.emit('userAdded', {
-                user: user
-            });
+    createUser(userInfo, myID) {
+        const { id, joined, left, info } = userInfo;
+        let user = this.allUsers.get(id);
+        if (!user) {
+            const { name, colorIndex } = info;
+            const isMe = (id === myID);
+            user = new ChatUser(isMe, id, name, joined, left, colorIndex);
         }
         return user;
     }
-    hasUser(id) {
-        return this.getUser(id) !== null;
+    ;
+    getUser(id) {
+        return this.allUsers.get(id);
     }
-    /**
-     * Remove a user from the list of users
-     * @param {string} id The user's ID
-     */
-    remove(id) {
-        for (var i = 0; i < this.activeUsers.length; i++) {
-            const user = this.activeUsers[i];
-            var id_i = user.getID();
-            if (id_i === id) {
-                user.setIsActive(false);
-                this.activeUsers.splice(i, 1);
-                this.emit('userRemoved', {
-                    id: id
-                });
+    getMe() {
+        const allUsers = this.allUsers.values();
+        for (let user of allUsers) {
+            if (user.getIsMe()) {
                 return user;
             }
         }
         return null;
     }
-    getUser(id) {
-        for (var i = 0; i < this.allUsers.length; i++) {
-            var id_i = this.allUsers[i].getID();
-            if (id_i === id) {
-                return this.allUsers[i];
-            }
-        }
-        return null;
-    }
-    getMe() {
-        for (var i = 0; i < this.allUsers.length; i++) {
-            if (this.allUsers[i].getIsMe()) {
-                return this.allUsers[i];
-            }
-        }
-        return null;
-    }
-    serialize() {
-        return _.map(this.allUsers, (u) => { return u.serialize(); });
+    getActiveUsers() {
+        return [];
+        // return this.activeUsers.values();
     }
 }
 exports.ChatUserList = ChatUserList;
