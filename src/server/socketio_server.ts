@@ -70,7 +70,7 @@ export class ChatCodesChannelServer {
 						type: 'join',
 						timestamp: this.getTimestamp()
 					};
-					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data.messages.length], li: userJoin}]);
+					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data['messages']['length']], li: userJoin}]);
 				}).then((chatDoc) => {
 					callback({
 						myID: id
@@ -90,7 +90,7 @@ export class ChatCodesChannelServer {
 					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data.messages.length], li: userLeft}]);
 				}).then((chatDoc) => {
 					member.left = this.getTimestamp();
-					chatDoc.submitOp([{p: ['activeUsers', id], od: member}]);;
+					return this.submitOp(chatDoc, [{p: ['activeUsers', id], od: member}]);
 				});
 			});
 
