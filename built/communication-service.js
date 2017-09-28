@@ -78,6 +78,8 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.chatDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'chat').then((doc) => {
             return new Promise((resolve, reject) => {
                 doc.subscribe((err) => {
+                    console.log(err);
+                    console.log(doc);
                     if (err) {
                         reject(err);
                     }

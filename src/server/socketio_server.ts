@@ -26,10 +26,11 @@ function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):P
 export class ChatCodesChannelServer {
 	private members:Set<WebSocket> = new Set<WebSocket>();
 	private ns:SocketIO.Namespace;
+	private chatPromise:Promise<ShareDB.Doc> = this.getShareDBChat();
+	// private editorsPromise:Promise<ShareDB.Doc> = this.getShareDBEditors();
 	constructor(private sharedb, private wss, private channelName:string, private io:SocketIO.Server) {
 		this.ns = this.io.of(`/${channelName}`);
-		this.getShareDBChat();
-		// console.log(this.ns);
+		this.initialize();
 	}
 	private submitOp(doc, data, options?):Promise<ShareDB.Doc> {
 		return new Promise<ShareDB.Doc>((resolve, reject) => {
@@ -59,7 +60,7 @@ export class ChatCodesChannelServer {
 
 			s.on('set-username', (username:string, callback) => {
 				member.info.name = username;
-				Promise.all([this.getShareDBChat()]).then((result) => {
+				Promise.all([this.chatPromise]).then((result) => {
 					const [chatDoc] = result;
 					return this.submitOp(chatDoc, [{p: ['activeUsers', id], oi: member}]);
 				}).then((chatDoc) => {
@@ -81,7 +82,7 @@ export class ChatCodesChannelServer {
 
 			s.on('disconnect', () => {
 				const timestamp = this.getTimestamp();
-				Promise.all([this.getShareDBChat(), this.getShareDBEditors()]).then(([chatDoc, editors]) => {
+				Promise.all([this.chatPromise]).then(([chatDoc]) => {
 					const userLeft = {
 						uid: id,
 						type: 'left',
@@ -96,9 +97,14 @@ export class ChatCodesChannelServer {
 
 			console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
 		});
-		return Promise.all([this.getShareDBChat(), this.getShareDBEditors()]).then(([chatDoc, editors]) => {
+		return Promise.all([this.chatPromise]).then(([chatDoc]) => {
 			return true;
 		});
+	}
+	public ready():Promise<boolean> {
+		return Promise.all([this.chatPromise]).then(([chat]) => {
+			return true;
+		})
 	}
 	private getTimestamp():number { return (new Date()).getTime(); };
 	public addMember(member:WebSocket) {
@@ -108,7 +114,7 @@ export class ChatCodesChannelServer {
 	private getShareDBChat():Promise<any> {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
-			connection.debug = true;
+			// connection.debug = true;
 			const doc = connection.get(this.getChannelName(), 'chat');
 			const contents = {
 				'activeUsers': {},
@@ -120,14 +126,15 @@ export class ChatCodesChannelServer {
 					reject(err);
 				} else if(doc.type === null) {
 					doc.create(contents, () => {
+						console.log(`Created chat for channel ${this.getChannelName()}`);
 						resolve(doc);
 					});
 				} else {
+					console.log(`Fetched chat for channel ${this.getChannelName()}`);
 					resolve(doc);
 				}
 			});
 		}).then((doc) => {
-			console.log(`Created chat for channel ${this.getChannelName()}`);
 			return doc;
 		});
 	};
@@ -135,10 +142,8 @@ export class ChatCodesChannelServer {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
 			connection.debug = true;
-			const doc = connection.get(this.getChannelName(), 'chat');
-			const contents = {
-				'editors': []
-			};
+			const doc = connection.get(this.getChannelName(), 'editors');
+			const contents = [];
 			doc.fetch((err) => {
 				if(err) {
 					reject(err);
@@ -232,7 +237,7 @@ export class ChatCodesSocketIOServer {
 			});
 			socket.on('request-join-room', (roomName:string, callback) => {
 				const channelServer = this.createNamespace(roomName);
-				channelServer.initialize().then(() => {
+				channelServer.ready().then(() => {
 					callback();
 				});
 				console.log(`Client (${id}) requested to join ${roomName}`);
@@ -273,13 +278,9 @@ export class ChatCodesSocketIOServer {
 		}
 	};
 	private createNamespace(channelName:string):ChatCodesChannelServer {
-		let channelPromise;
 		if(!this.channels.has(channelName)) {
 			const channelServer = new ChatCodesChannelServer(this.sharedb, this.wss, channelName, this.io);
 			this.channels.set(channelName, channelServer);
-			channelPromise = channelServer.initialize();
-		} else {
-			channelPromise = Promise.resolve(true);
 		}
 
 		const channelServer = this.channels.get(channelName);

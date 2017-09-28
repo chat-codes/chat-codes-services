@@ -26,16 +26,17 @@ function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
     });
 }
 class ChatCodesChannelServer {
+    // private editorsPromise:Promise<ShareDB.Doc> = this.getShareDBEditors();
     constructor(sharedb, wss, channelName, io) {
         this.sharedb = sharedb;
         this.wss = wss;
         this.channelName = channelName;
         this.io = io;
         this.members = new Set();
+        this.chatPromise = this.getShareDBChat();
         this.colorIndex = 0;
         this.ns = this.io.of(`/${channelName}`);
-        this.getShareDBChat();
-        // console.log(this.ns);
+        this.initialize();
     }
     submitOp(doc, data, options) {
         return new Promise((resolve, reject) => {
@@ -66,7 +67,7 @@ class ChatCodesChannelServer {
             this.members[id] = member;
             s.on('set-username', (username, callback) => {
                 member.info.name = username;
-                Promise.all([this.getShareDBChat()]).then((result) => {
+                Promise.all([this.chatPromise]).then((result) => {
                     const [chatDoc] = result;
                     return this.submitOp(chatDoc, [{ p: ['activeUsers', id], oi: member }]);
                 }).then((chatDoc) => {
@@ -87,7 +88,7 @@ class ChatCodesChannelServer {
             });
             s.on('disconnect', () => {
                 const timestamp = this.getTimestamp();
-                Promise.all([this.getShareDBChat(), this.getShareDBEditors()]).then(([chatDoc, editors]) => {
+                Promise.all([this.chatPromise]).then(([chatDoc]) => {
                     const userLeft = {
                         uid: id,
                         type: 'left',
@@ -101,7 +102,12 @@ class ChatCodesChannelServer {
             });
             console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
         });
-        return Promise.all([this.getShareDBChat(), this.getShareDBEditors()]).then(([chatDoc, editors]) => {
+        return Promise.all([this.chatPromise]).then(([chatDoc]) => {
+            return true;
+        });
+    }
+    ready() {
+        return Promise.all([this.chatPromise]).then(([chat]) => {
             return true;
         });
     }
@@ -115,7 +121,7 @@ class ChatCodesChannelServer {
     getShareDBChat() {
         return new Promise((resolve, reject) => {
             const connection = this.sharedb.connect();
-            connection.debug = true;
+            // connection.debug = true;
             const doc = connection.get(this.getChannelName(), 'chat');
             const contents = {
                 'activeUsers': {},
@@ -128,15 +134,16 @@ class ChatCodesChannelServer {
                 }
                 else if (doc.type === null) {
                     doc.create(contents, () => {
+                        console.log(`Created chat for channel ${this.getChannelName()}`);
                         resolve(doc);
                     });
                 }
                 else {
+                    console.log(`Fetched chat for channel ${this.getChannelName()}`);
                     resolve(doc);
                 }
             });
         }).then((doc) => {
-            console.log(`Created chat for channel ${this.getChannelName()}`);
             return doc;
         });
     }
@@ -145,10 +152,8 @@ class ChatCodesChannelServer {
         return new Promise((resolve, reject) => {
             const connection = this.sharedb.connect();
             connection.debug = true;
-            const doc = connection.get(this.getChannelName(), 'chat');
-            const contents = {
-                'editors': []
-            };
+            const doc = connection.get(this.getChannelName(), 'editors');
+            const contents = [];
             doc.fetch((err) => {
                 if (err) {
                     reject(err);
@@ -245,7 +250,7 @@ class ChatCodesSocketIOServer {
             });
             socket.on('request-join-room', (roomName, callback) => {
                 const channelServer = this.createNamespace(roomName);
-                channelServer.initialize().then(() => {
+                channelServer.ready().then(() => {
                     callback();
                 });
                 console.log(`Client (${id}) requested to join ${roomName}`);
@@ -287,14 +292,9 @@ class ChatCodesSocketIOServer {
     }
     ;
     createNamespace(channelName) {
-        let channelPromise;
         if (!this.channels.has(channelName)) {
             const channelServer = new ChatCodesChannelServer(this.sharedb, this.wss, channelName, this.io);
             this.channels.set(channelName, channelServer);
-            channelPromise = channelServer.initialize();
-        }
-        else {
-            channelPromise = Promise.resolve(true);
         }
         const channelServer = this.channels.get(channelName);
         return channelServer;

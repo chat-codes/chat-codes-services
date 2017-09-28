@@ -61,6 +61,7 @@ export class ChatUserList extends EventEmitter {
             // const [doc:sharedb.Doc, myID:string] = info;
             // console.log(doc);
             console.log(doc);
+            console.log(myID);
             _.each(doc.data.allUsers, (oi:any) => {
                 this.allUsers.set(oi.id, this.createUser(oi, myID));
             });
