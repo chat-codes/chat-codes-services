@@ -229,7 +229,10 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {string} message The text of the message to send
      */
     public sendTextMessage(message:string):void {
-        Promise.all([this.getMyID(), this.getShareDBChat()]).then(([myID, doc]) => {
+        Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
+            const myID:string = info[1]
+            const doc:sharedb.Doc = info[1]
+
             const data = {
                 uid: myID,
                 type: 'text',

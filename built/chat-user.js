@@ -65,7 +65,12 @@ class ChatUserList extends events_1.EventEmitter {
         this.allUsers = new Map();
         this.chatDocPromise = this.channelService.getShareDBChat();
         Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
-            const [doc, myID] = info;
+            // const [doc, myID] = info;
+            const doc = info[0];
+            const myID = info[1];
+            // const [doc:sharedb.Doc, myID:string] = info;
+            // console.log(doc);
+            console.log(doc);
             _.each(doc.data.allUsers, (oi) => {
                 this.allUsers.set(oi.id, this.createUser(oi, myID));
             });
@@ -128,8 +133,9 @@ class ChatUserList extends events_1.EventEmitter {
         return this.allUsers.get(id);
     }
     getMe() {
-        const allUsers = this.allUsers.values();
-        for (let user of allUsers) {
+        const activeUsers = this.getActiveUsers();
+        for (let i = 0; i < activeUsers.length; i++) {
+            let user = activeUsers[i];
             if (user.getIsMe()) {
                 return user;
             }
@@ -137,8 +143,8 @@ class ChatUserList extends events_1.EventEmitter {
         return null;
     }
     getActiveUsers() {
-        return [];
-        // return this.activeUsers.values();
+        // return [];
+        return Array.from(this.activeUsers.values());
     }
 }
 exports.ChatUserList = ChatUserList;

@@ -55,7 +55,12 @@ export class ChatUserList extends EventEmitter {
         super();
         this.chatDocPromise = this.channelService.getShareDBChat();
         Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
-            const [doc, myID] = info;
+            // const [doc, myID] = info;
+            const doc:ShareDB.Doc = info[0];
+            const myID:string = info[1];
+            // const [doc:sharedb.Doc, myID:string] = info;
+            // console.log(doc);
+            console.log(doc);
             _.each(doc.data.allUsers, (oi:any) => {
                 this.allUsers.set(oi.id, this.createUser(oi, myID));
             });
@@ -75,11 +80,11 @@ export class ChatUserList extends EventEmitter {
                             if(od.id !== oi.id) {
                                 const addedUser = this.createUser(oi, myID);
                                 userMap.delete(od.id);
-                                this.emit('userRemoved', {
+                                (this as any).emit('userRemoved', {
                                     id: od.id
                                 });
                                 userMap.set(oi.id, addedUser);
-                                this.emit('userAdded', {
+                                (this as any).emit('userAdded', {
                                     user: addedUser
                                 });
                             }
@@ -87,7 +92,7 @@ export class ChatUserList extends EventEmitter {
                             const {od} = op;
                             const {id} = od;
                             userMap.delete(id);
-                            this.emit('userRemoved', {
+                            (this as any).emit('userRemoved', {
                                 id: id
                             });
                         } else if (_.has(op, 'oi')) {
@@ -95,7 +100,7 @@ export class ChatUserList extends EventEmitter {
                             const addedUser = this.createUser(oi, myID);
 
                             userMap.set(oi.id, addedUser);
-                            this.emit('userAdded', {
+                            (this as any).emit('userAdded', {
                                 user: addedUser
                             });
                         }
@@ -120,14 +125,15 @@ export class ChatUserList extends EventEmitter {
         return this.allUsers.get(id);
     }
     public getMe():ChatUser {
-        const allUsers:Iterable<ChatUser> = this.allUsers.values();
-        for(let user of allUsers) {
+        const activeUsers = this.getActiveUsers();
+        for(let i = 0; i<activeUsers.length; i++) {
+            let user = activeUsers[i];
             if(user.getIsMe()) { return user; }
         }
         return null;
     }
-    public getActiveUsers():Iterable<ChatUser> {
-        return [];
-        // return this.activeUsers.values();
+    public getActiveUsers():Array<ChatUser> {
+        // return [];
+        return Array.from(this.activeUsers.values());
     }
 }

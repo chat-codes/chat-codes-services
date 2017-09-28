@@ -136,7 +136,9 @@ export class ChatCodesChannelServer {
 			const connection = this.sharedb.connect();
 			connection.debug = true;
 			const doc = connection.get(this.getChannelName(), 'chat');
-			const contents = { };
+			const contents = {
+				'editors': []
+			};
 			doc.fetch((err) => {
 				if(err) {
 					reject(err);

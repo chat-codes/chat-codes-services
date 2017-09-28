@@ -537,7 +537,8 @@ class EditorStateTracker extends events_1.EventEmitter {
     createEditor(id, contents, grammarName, modified) {
         this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
             const data = { id, contents, grammarName, modified };
-            // editorDoc.
+            editorDoc.submitOp({ p: ['editors', editorDoc.data['editors'].length], li: data });
+            console.log(editorDoc);
         });
         // this.channelCommunicationService.emitEditorOpened({ id, contents });
         //

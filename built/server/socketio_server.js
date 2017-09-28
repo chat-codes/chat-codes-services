@@ -77,7 +77,7 @@ class ChatCodesChannelServer {
                         type: 'join',
                         timestamp: this.getTimestamp()
                     };
-                    return this.submitOp(chatDoc, [{ p: ['messages', chatDoc.data.messages.length], li: userJoin }]);
+                    return this.submitOp(chatDoc, [{ p: ['messages', chatDoc.data['messages']['length']], li: userJoin }]);
                 }).then((chatDoc) => {
                     callback({
                         myID: id
@@ -96,8 +96,7 @@ class ChatCodesChannelServer {
                     return this.submitOp(chatDoc, [{ p: ['messages', chatDoc.data.messages.length], li: userLeft }]);
                 }).then((chatDoc) => {
                     member.left = this.getTimestamp();
-                    chatDoc.submitOp([{ p: ['activeUsers', id], od: member }]);
-                    ;
+                    return this.submitOp(chatDoc, [{ p: ['activeUsers', id], od: member }]);
                 });
             });
             console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
@@ -147,7 +146,9 @@ class ChatCodesChannelServer {
             const connection = this.sharedb.connect();
             connection.debug = true;
             const doc = connection.get(this.getChannelName(), 'chat');
-            const contents = {};
+            const contents = {
+                'editors': []
+            };
             doc.fetch((err) => {
                 if (err) {
                     reject(err);
