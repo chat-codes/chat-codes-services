@@ -2,12 +2,14 @@ import { Manager, Socket } from 'socket.io-client';
 import { CommunicationLayer } from './communication-layer-interface';
 import * as sharedb from 'sharedb/lib/client';
 import * as _ from 'underscore';
+import * as textType from 'ot-text';
+import * as json0Type from 'ot-json0';
 
 export class SocketIOCommunicationLayer implements CommunicationLayer {
 	private manager:Promise<SocketIOClient.Manager>;
 	private mainSocket:Promise<SocketIOClient.Socket>;
 	private wsConnectionPromise:Promise<sharedb.Connection>;
-	private namespaces:{[name:string]:any} = {};
+	private namespaces:Map<string, Promise<SocketIOClient.Socket>> = new Map();
 	private username:string;
 	constructor(private authInfo) {
 		this.username = authInfo.username;
@@ -32,46 +34,26 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			});
 		});
 	}
-	private getNamespaceAndHistory(name:string):Promise<any> {
-		if(_.has(this.namespaces, name)) {
-			return this.namespaces[name];
-		} else {
-			let socket:SocketIOClient.Socket;
-			this.namespaces[name] = this.mainSocket.then((socket) => {
-				return new Promise((resolve, reject) => {
-					socket.emit('request-join-room', name, (response) => {
-						resolve(response);
-					});
+	public createEditorDoc(channelName:string, id:string, contents:string):Promise<sharedb.Doc> {
+		return this.getNamespace(channelName).then((channel:SocketIOClient.Socket) => {
+			return new Promise((resolve, reject) => {
+				channel.emit('create-editor', id, contents, () => {
+					resolve();
 				});
-			}).then(() => {
-				return this.manager;
-			}).then((manager) => {
-				socket = manager.socket(`/${name}`);
-				return new Promise<SocketIOClient.Socket>((resolve, reject) => {
-					socket.on('connect', (event) => {
-						socket.emit('set-username', this.username, (history) => {
-							resolve(history);
-						});
-					});
-				});
-			}).then((history) => {
-				return {
-					history: history,
-					socket: socket,
-					listeners: {
-
-					}
-				};
 			});
-			return this.namespaces[name];
-		}
-	};
+		}).then(() => {
+			return this.getShareDBObject(channelName, id);
+		});
+	}
+	public getWSConnection():Promise<sharedb.Connection> {
+		return this.wsConnectionPromise;
+	}
 	private getNamespace(name:string):Promise<SocketIOClient.Socket> {
-		if(_.has(this.namespaces, name)) {
-			return this.namespaces[name];
+		if(this.namespaces.has(name)) {
+			return this.namespaces.get(name);
 		} else {
 			let socket:SocketIOClient.Socket;
-			return this.namespaces[name] = this.mainSocket.then((socket) => {
+			const namespacePromise:Promise<SocketIOClient.Socket> = this.namespaces[name] = this.mainSocket.then((socket) => {
 				return new Promise((resolve, reject) => {
 					socket.emit('request-join-room', name, (response) => {
 						resolve(response);
@@ -91,6 +73,8 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			}).then(() => {
 				return socket;
 			});
+			this.namespaces.set(name, namespacePromise);
+			return namespacePromise;
 		}
 	}
 	public getMyID(channelName:string):Promise<string> {
@@ -104,7 +88,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 		});
 	};
 
-	public getShareDBObject(path:string, channelName:string):Promise<sharedb.Doc> {
+	public getShareDBObject(channelName:string, path:string):Promise<sharedb.Doc> {
 		return this.wsConnectionPromise.then((connection) => {
 			const doc = connection.get(channelName, path);
 			return doc;

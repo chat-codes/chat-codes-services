@@ -301,18 +301,51 @@ export class ConnectionMessageGroup extends Group<ConnectionMessage> {
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
 export class MessageGroups extends EventEmitter {
-	constructor(private channelService:ChannelCommunicationService, private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
-		super();
-        this.chatDocPromise = this.channelService.getShareDBChat();
-	};
     private chatDocPromise:Promise<ShareDB.Doc>;
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
 	private messageGroups: Array<Group<TextMessage|UndoableDelta|ConnectionMessage>> = [];
-	private messages:Array<any> = [];
-
-	public getMessageHistory():Array<any> {
-		return this.messages;
+	constructor(private channelService:ChannelCommunicationService, private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
+		super();
+        this.chatDocPromise = this.channelService.getShareDBChat();
+		Promise.all([this.chatDocPromise, this.chatUserList.ready]).then(([doc, culReady]) => {
+			this.chatDocPromise.then((doc) => {
+				doc.data['messages'].forEach((li) => {
+					this.addFromSerializedMessage(li);
+				});
+	            doc.on('op', (ops, source) => {
+	                ops.forEach((op) => {
+	                    const {p} = op;
+	                    const [field] = p;
+						if(field === 'messages') {
+							if(_.has(op, 'li')) {
+								const {li} = op;
+								this.addFromSerializedMessage(li);
+							}
+						}
+	                });
+	            });
+			});
+		});
+	};
+	private addFromSerializedMessage(li) {
+		const {type} = li;
+		if(type === 'text') {
+			const sender = this.chatUserList.getUser(li.uid);
+			const message:TextMessage = new TextMessage(sender, li.timestamp, li.message, this.editorStateTracker);
+			return this.addItem(message);
+		} else if(type === 'join') {
+			const user = this.chatUserList.getUser(li.uid);
+			this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.connect));
+		} else if(type === 'left') {
+			const user = this.chatUserList.getUser(li.uid);
+			this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect));
+		}
 	}
+	public addDelta(delta:UndoableDelta) {
+		if(delta instanceof EditDelta) {
+			this.addItem(delta);
+		}
+	};
 
 	private typeMatches(item:Timestamped, group:Group<Timestamped>):boolean {
 		return (group instanceof EditGroup && item instanceof EditDelta) ||
@@ -389,23 +422,6 @@ export class MessageGroups extends EventEmitter {
 		});
 	}
 
-	public addTextMessage(data) {
-		this.messages.push(data);
-		const sender = this.chatUserList.getUser(data.uid);
-		const message:TextMessage = new TextMessage(sender, data.timestamp, data.message, this.editorStateTracker);
-		return this.addItem(message);
-	};
-	public addConnectionMessage(user:ChatUser, timestamp:number) {
-		this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.connect));
-	};
-	public addDisconnectionMessage(user:ChatUser, timestamp:number) {
-		this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.disconnect));
-	};
-	public addDelta(delta:UndoableDelta) {
-		if(delta instanceof EditDelta) {
-			this.addItem(delta);
-		}
-	};
 	public getMessageGroups() { return this.messageGroups; }
 
 	/**

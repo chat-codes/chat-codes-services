@@ -1,12 +1,10 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const socket_io_client_1 = require("socket.io-client");
 const sharedb = require("sharedb/lib/client");
-const _ = require("underscore");
 class SocketIOCommunicationLayer {
     constructor(authInfo) {
         this.authInfo = authInfo;
-        this.namespaces = {};
+        this.namespaces = new Map();
         this.username = authInfo.username;
         this.manager = new Promise((resolve, reject) => {
             resolve(new socket_io_client_1.Manager(`http://${authInfo.host}:${authInfo.port}`));
@@ -29,47 +27,27 @@ class SocketIOCommunicationLayer {
             });
         });
     }
-    getNamespaceAndHistory(name) {
-        if (_.has(this.namespaces, name)) {
-            return this.namespaces[name];
-        }
-        else {
-            let socket;
-            this.namespaces[name] = this.mainSocket.then((socket) => {
-                return new Promise((resolve, reject) => {
-                    socket.emit('request-join-room', name, (response) => {
-                        resolve(response);
-                    });
+    createEditorDoc(channelName, id, contents) {
+        return this.getNamespace(channelName).then((channel) => {
+            return new Promise((resolve, reject) => {
+                channel.emit('create-editor', id, contents, () => {
+                    resolve();
                 });
-            }).then(() => {
-                return this.manager;
-            }).then((manager) => {
-                socket = manager.socket(`/${name}`);
-                return new Promise((resolve, reject) => {
-                    socket.on('connect', (event) => {
-                        socket.emit('set-username', this.username, (history) => {
-                            resolve(history);
-                        });
-                    });
-                });
-            }).then((history) => {
-                return {
-                    history: history,
-                    socket: socket,
-                    listeners: {}
-                };
             });
-            return this.namespaces[name];
-        }
+        }).then(() => {
+            return this.getShareDBObject(channelName, id);
+        });
     }
-    ;
+    getWSConnection() {
+        return this.wsConnectionPromise;
+    }
     getNamespace(name) {
-        if (_.has(this.namespaces, name)) {
-            return this.namespaces[name];
+        if (this.namespaces.has(name)) {
+            return this.namespaces.get(name);
         }
         else {
             let socket;
-            return this.namespaces[name] = this.mainSocket.then((socket) => {
+            const namespacePromise = this.namespaces[name] = this.mainSocket.then((socket) => {
                 return new Promise((resolve, reject) => {
                     socket.emit('request-join-room', name, (response) => {
                         resolve(response);
@@ -89,6 +67,8 @@ class SocketIOCommunicationLayer {
             }).then(() => {
                 return socket;
             });
+            this.namespaces.set(name, namespacePromise);
+            return namespacePromise;
         }
     }
     getMyID(channelName) {
@@ -102,7 +82,7 @@ class SocketIOCommunicationLayer {
         });
     }
     ;
-    getShareDBObject(path, channelName) {
+    getShareDBObject(channelName, path) {
         return this.wsConnectionPromise.then((connection) => {
             const doc = connection.get(channelName, path);
             return doc;

@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const socket_communication_layer_1 = require("./socket-communication-layer");
@@ -74,33 +73,10 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commService = commService;
         this.channelName = channelName;
         this._isRoot = false;
+        this.editorDocs = new Map();
         this.commLayer = commService.commLayer;
-        this.chatDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'chat').then((doc) => {
-            return new Promise((resolve, reject) => {
-                doc.subscribe((err) => {
-                    console.log(err);
-                    console.log(doc);
-                    if (err) {
-                        reject(err);
-                    }
-                    else {
-                        resolve(doc);
-                    }
-                });
-            });
-        });
-        this.editorsDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'editors').then((doc) => {
-            return new Promise((resolve, reject) => {
-                doc.subscribe((err) => {
-                    if (err) {
-                        reject(err);
-                    }
-                    else {
-                        resolve(doc);
-                    }
-                });
-            });
-        });
+        this.chatDoc = this.createDocSubscription('chat');
+        this.editorsDoc = this.createDocSubscription('editors');
         this.userList = new chat_user_1.ChatUserList(this.getMyID(), this);
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new chat_messages_1.MessageGroups(this, this.userList, this.editorStateTracker);
@@ -162,6 +138,34 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             this.emit('editor-opened', data);
         });
     }
+    createDocSubscription(docName) {
+        return this.commLayer.getShareDBObject(this.getChannelName(), docName).then((doc) => {
+            return new Promise((resolve, reject) => {
+                doc.subscribe((err) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(doc);
+                    }
+                });
+            });
+        });
+    }
+    createEditorDoc(id, contents) {
+        return this.commLayer.createEditorDoc(this.getChannelName(), id, contents);
+    }
+    ;
+    getShareDBEditor(id) {
+        if (this.editorDocs.has(id)) {
+            return this.editorDocs.get(id);
+        }
+        else {
+            const editorDocPromise = this.createDocSubscription(id);
+            this.editorDocs.set(id, editorDocPromise);
+            return editorDocPromise;
+        }
+    }
     getMyID() {
         return this.commLayer.getMyID(this.getChannelName());
     }
@@ -209,7 +213,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      */
     sendTextMessage(message) {
         Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
-            const myID = info[1];
+            const myID = info[0];
             const doc = info[1];
             const data = {
                 uid: myID,

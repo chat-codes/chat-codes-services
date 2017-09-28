@@ -79,6 +79,7 @@ export class ChannelCommunicationService extends EventEmitter {
     private chatDoc:Promise<sharedb.Doc>;
     private editorsDoc:Promise<sharedb.Doc>;
     private commLayer:SocketIOCommunicationLayer;
+    private editorDocs:Map<string,Promise<sharedb.Doc>> = new Map();
     /**
      * [constructor description]
      * @param  {CommunicationService} privatecommService The CommunicationService object that created this instance
@@ -89,30 +90,8 @@ export class ChannelCommunicationService extends EventEmitter {
         super();
         this.commLayer = commService.commLayer;
 
-        this.chatDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'chat').then((doc) => {
-            return new Promise((resolve, reject) => {
-                doc.subscribe((err) => {
-                    console.log(err);
-                    console.log(doc);
-                    if(err) {
-                        reject(err);
-                    } else {
-                        resolve(doc);
-                    }
-                });
-            });
-        });
-        this.editorsDoc = this.commLayer.getShareDBObject(this.getChannelName(), 'editors').then((doc) => {
-            return new Promise((resolve, reject) => {
-                doc.subscribe((err) => {
-                    if(err) {
-                        reject(err);
-                    } else {
-                        resolve(doc);
-                    }
-                });
-            });
-        });
+        this.chatDoc = this.createDocSubscription('chat');
+        this.editorsDoc = this.createDocSubscription('editors');
 
         this.userList = new ChatUserList(this.getMyID(), this);
         this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
@@ -181,6 +160,31 @@ export class ChannelCommunicationService extends EventEmitter {
             (this as any).emit('editor-opened', data);
     	});
     }
+    private createDocSubscription(docName:string):Promise<sharedb.Doc> {
+        return this.commLayer.getShareDBObject(this.getChannelName(), docName).then((doc) => {
+            return new Promise((resolve, reject) => {
+                doc.subscribe((err) => {
+                    if(err) {
+                        reject(err);
+                    } else {
+                        resolve(doc);
+                    }
+                });
+            });
+        });
+    }
+    public createEditorDoc(id:string, contents:string):Promise<sharedb.Doc> {
+        return this.commLayer.createEditorDoc(this.getChannelName(), id, contents);
+    };
+    public getShareDBEditor(id:string):Promise<sharedb.Doc> {
+        if(this.editorDocs.has(id)) {
+            return this.editorDocs.get(id);
+        } else {
+            const editorDocPromise:Promise<sharedb.Doc> = this.createDocSubscription(id);
+            this.editorDocs.set(id, editorDocPromise);
+            return editorDocPromise;
+        }
+    }
 	public getMyID():Promise<string> {
         return this.commLayer.getMyID(this.getChannelName());
 	}
@@ -232,7 +236,7 @@ export class ChannelCommunicationService extends EventEmitter {
      */
     public sendTextMessage(message:string):void {
         Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
-            const myID:string = info[1]
+            const myID:string = info[0]
             const doc:sharedb.Doc = info[1]
 
             const data = {

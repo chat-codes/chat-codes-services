@@ -51,17 +51,16 @@ export class ChatUserList extends EventEmitter {
     private activeUsers:Map<string, ChatUser>=new Map();
     private allUsers:Map<string, ChatUser>=new Map();
     private chatDocPromise:Promise<ShareDB.Doc>;
+    public ready:Promise<boolean>;
     constructor(private myIDPromise:Promise<string>, private channelService:ChannelCommunicationService) {
         super();
         this.chatDocPromise = this.channelService.getShareDBChat();
-        Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
+        this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
             // const [doc, myID] = info;
             const doc:ShareDB.Doc = info[0];
             const myID:string = info[1];
             // const [doc:sharedb.Doc, myID:string] = info;
             // console.log(doc);
-            console.log(doc);
-            console.log(myID);
             _.each(doc.data.allUsers, (oi:any) => {
                 this.allUsers.set(oi.id, this.createUser(oi, myID));
             });
@@ -108,6 +107,8 @@ export class ChatUserList extends EventEmitter {
                     }
                 });
             });
+        }).then(() => {
+            return true;
         });
     }
     private createUser(userInfo, myID):ChatUser {

@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
@@ -326,13 +325,50 @@ class MessageGroups extends events_1.EventEmitter {
         this.editorStateTracker = editorStateTracker;
         this.messageGroupingTimeThreshold = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
         this.messageGroups = [];
-        this.messages = [];
         this.chatDocPromise = this.channelService.getShareDBChat();
+        Promise.all([this.chatDocPromise, this.chatUserList.ready]).then(([doc, culReady]) => {
+            this.chatDocPromise.then((doc) => {
+                doc.data['messages'].forEach((li) => {
+                    this.addFromSerializedMessage(li);
+                });
+                doc.on('op', (ops, source) => {
+                    ops.forEach((op) => {
+                        const { p } = op;
+                        const [field] = p;
+                        if (field === 'messages') {
+                            if (_.has(op, 'li')) {
+                                const { li } = op;
+                                this.addFromSerializedMessage(li);
+                            }
+                        }
+                    });
+                });
+            });
+        });
     }
     ;
-    getMessageHistory() {
-        return this.messages;
+    addFromSerializedMessage(li) {
+        const { type } = li;
+        if (type === 'text') {
+            const sender = this.chatUserList.getUser(li.uid);
+            const message = new TextMessage(sender, li.timestamp, li.message, this.editorStateTracker);
+            return this.addItem(message);
+        }
+        else if (type === 'join') {
+            const user = this.chatUserList.getUser(li.uid);
+            this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.connect));
+        }
+        else if (type === 'left') {
+            const user = this.chatUserList.getUser(li.uid);
+            this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect));
+        }
     }
+    addDelta(delta) {
+        if (delta instanceof editor_state_tracker_1.EditDelta) {
+            this.addItem(delta);
+        }
+    }
+    ;
     typeMatches(item, group) {
         return (group instanceof EditGroup && item instanceof editor_state_tracker_1.EditDelta) ||
             (group instanceof TextMessageGroup && item instanceof TextMessage) ||
@@ -408,27 +444,6 @@ class MessageGroups extends events_1.EventEmitter {
             this.emit('item-added', event);
         });
     }
-    addTextMessage(data) {
-        this.messages.push(data);
-        const sender = this.chatUserList.getUser(data.uid);
-        const message = new TextMessage(sender, data.timestamp, data.message, this.editorStateTracker);
-        return this.addItem(message);
-    }
-    ;
-    addConnectionMessage(user, timestamp) {
-        this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.connect));
-    }
-    ;
-    addDisconnectionMessage(user, timestamp) {
-        this.addItem(new ConnectionMessage(user, timestamp, ConnectionAction.disconnect));
-    }
-    ;
-    addDelta(delta) {
-        if (delta instanceof editor_state_tracker_1.EditDelta) {
-            this.addItem(delta);
-        }
-    }
-    ;
     getMessageGroups() { return this.messageGroups; }
     /**
      * Returns true if there are no messages and false otherwise

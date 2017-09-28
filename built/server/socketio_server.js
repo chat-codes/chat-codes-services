@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -12,6 +11,8 @@ const express = require("express");
 const http = require("http");
 const WebSocket = require("ws");
 const WebSocketJSONStream = require("websocket-json-stream");
+const otText = require("ot-text");
+ShareDB.types.map['json0'].registerSubtype(otText.type);
 pg.defaults.ssl = true;
 function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
     return new Promise((resolve, reject) => {
@@ -26,7 +27,6 @@ function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
     });
 }
 class ChatCodesChannelServer {
-    // private editorsPromise:Promise<ShareDB.Doc> = this.getShareDBEditors();
     constructor(sharedb, wss, channelName, io) {
         this.sharedb = sharedb;
         this.wss = wss;
@@ -34,6 +34,7 @@ class ChatCodesChannelServer {
         this.io = io;
         this.members = new Set();
         this.chatPromise = this.getShareDBChat();
+        this.editorsPromise = this.getShareDBEditors();
         this.colorIndex = 0;
         this.ns = this.io.of(`/${channelName}`);
         this.initialize();
@@ -65,10 +66,15 @@ class ChatCodesChannelServer {
             };
             this.colorIndex = (this.colorIndex + 1) % ChatCodesChannelServer.NUM_COLORS;
             this.members[id] = member;
+            // s.on('create-editor', (id:string, contents:string, callback) => {
+            // 	this.getShareDBDoc(id, contents).then(() => {
+            // 		callback('ready');
+            // 	});
+            // });
             s.on('set-username', (username, callback) => {
                 member.info.name = username;
                 Promise.all([this.chatPromise]).then((result) => {
-                    const [chatDoc] = result;
+                    const chatDoc = result[0];
                     return this.submitOp(chatDoc, [{ p: ['activeUsers', id], oi: member }]);
                 }).then((chatDoc) => {
                     return this.submitOp(chatDoc, [{ p: ['allUsers', id], oi: member }]);
@@ -121,19 +127,18 @@ class ChatCodesChannelServer {
     getShareDBChat() {
         return new Promise((resolve, reject) => {
             const connection = this.sharedb.connect();
-            // connection.debug = true;
             const doc = connection.get(this.getChannelName(), 'chat');
             const contents = {
                 'activeUsers': {},
                 'allUsers': {},
-                'messages': []
+                'messages': [],
             };
             doc.fetch((err) => {
                 if (err) {
                     reject(err);
                 }
                 else if (doc.type === null) {
-                    doc.create(contents, () => {
+                    doc.create(contents, 'json0', () => {
                         console.log(`Created chat for channel ${this.getChannelName()}`);
                         resolve(doc);
                     });
@@ -159,7 +164,7 @@ class ChatCodesChannelServer {
                     reject(err);
                 }
                 else if (doc.type === null) {
-                    doc.create(contents, () => {
+                    doc.create(contents, 'json0', () => {
                         resolve(doc);
                     });
                 }
@@ -170,26 +175,6 @@ class ChatCodesChannelServer {
         }).then((doc) => {
             console.log(`Created editors for channel ${this.getChannelName()}`);
             return doc;
-        });
-    }
-    ;
-    getShareDBDoc(id, contents) {
-        return new Promise((resolve, reject) => {
-            const connection = this.sharedb.connect();
-            const doc = connection.get(this.getChannelName(), id);
-            doc.fetch((err) => {
-                if (err) {
-                    reject(err);
-                }
-                else if (doc.type === null) {
-                    doc.create(contents, () => {
-                        resolve(doc);
-                    });
-                }
-                else {
-                    resolve(doc);
-                }
-            });
         });
     }
     ;

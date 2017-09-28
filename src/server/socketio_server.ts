@@ -10,6 +10,9 @@ import * as express from 'express';
 import * as http from 'http';
 import * as WebSocket from 'ws';
 import * as WebSocketJSONStream from 'websocket-json-stream';
+import * as otText from 'ot-text';
+
+ShareDB.types.map['json0'].registerSubtype(otText.type);
 
 pg.defaults.ssl = true;
 
@@ -27,7 +30,7 @@ export class ChatCodesChannelServer {
 	private members:Set<WebSocket> = new Set<WebSocket>();
 	private ns:SocketIO.Namespace;
 	private chatPromise:Promise<ShareDB.Doc> = this.getShareDBChat();
-	// private editorsPromise:Promise<ShareDB.Doc> = this.getShareDBEditors();
+	private editorsPromise:Promise<ShareDB.Doc> = this.getShareDBEditors();
 	constructor(private sharedb, private wss, private channelName:string, private io:SocketIO.Server) {
 		this.ns = this.io.of(`/${channelName}`);
 		this.initialize();
@@ -58,21 +61,27 @@ export class ChatCodesChannelServer {
 			this.colorIndex = (this.colorIndex+1)%ChatCodesChannelServer.NUM_COLORS;
 			this.members[id] = member;
 
+			// s.on('create-editor', (id:string, contents:string, callback) => {
+			// 	this.getShareDBDoc(id, contents).then(() => {
+			// 		callback('ready');
+			// 	});
+			// });
+
 			s.on('set-username', (username:string, callback) => {
 				member.info.name = username;
 				Promise.all([this.chatPromise]).then((result) => {
-					const [chatDoc] = result;
+					const chatDoc:ShareDB.Doc = result[0];
 					return this.submitOp(chatDoc, [{p: ['activeUsers', id], oi: member}]);
-				}).then((chatDoc) => {
+				}).then((chatDoc:ShareDB.Doc) => {
 					return this.submitOp(chatDoc, [{p: ['allUsers', id], oi: member}]);
-				}).then((chatDoc) => {
+				}).then((chatDoc:ShareDB.Doc) => {
 					const userJoin = {
 						uid: id,
 						type: 'join',
 						timestamp: this.getTimestamp()
 					};
 					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data['messages']['length']], li: userJoin}]);
-				}).then((chatDoc) => {
+				}).then((chatDoc:ShareDB.Doc) => {
 					callback({
 						myID: id
 					});
@@ -89,7 +98,7 @@ export class ChatCodesChannelServer {
 						timestamp: timestamp
 					};
 					return this.submitOp(chatDoc, [{p: ['messages', chatDoc.data.messages.length], li: userLeft}]);
-				}).then((chatDoc) => {
+				}).then((chatDoc:ShareDB.Doc) => {
 					member.left = this.getTimestamp();
 					return this.submitOp(chatDoc, [{p: ['activeUsers', id], od: member}]);
 				});
@@ -114,18 +123,17 @@ export class ChatCodesChannelServer {
 	private getShareDBChat():Promise<any> {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
-			// connection.debug = true;
 			const doc = connection.get(this.getChannelName(), 'chat');
 			const contents = {
 				'activeUsers': {},
 				'allUsers': {},
-				'messages': []
+				'messages': [],
 			};
 			doc.fetch((err) => {
 				if(err) {
 					reject(err);
 				} else if(doc.type === null) {
-					doc.create(contents, () => {
+					doc.create(contents, 'json0', () => {
 						console.log(`Created chat for channel ${this.getChannelName()}`);
 						resolve(doc);
 					});
@@ -148,7 +156,7 @@ export class ChatCodesChannelServer {
 				if(err) {
 					reject(err);
 				} else if(doc.type === null) {
-					doc.create(contents, () => {
+					doc.create(contents, 'json0', () => {
 						resolve(doc);
 					});
 				} else {
@@ -160,24 +168,26 @@ export class ChatCodesChannelServer {
 			return doc;
 		});
 	};
-
-	private getShareDBDoc(id:string, contents:string):Promise<any> {
-		return new Promise((resolve, reject) => {
-			const connection = this.sharedb.connect();
-			const doc = connection.get(this.getChannelName(), id);
-			doc.fetch((err) => {
-				if(err) {
-					reject(err);
-				} else if(doc.type === null) {
-					doc.create(contents, () => {
-						resolve(doc);
-					});
-				} else {
-					resolve(doc);
-				}
-			});
-		});
-	};
+	//
+	// private getShareDBDoc(id:string, contents:string):Promise<any> {
+	// 	return new Promise((resolve, reject) => {
+	// 		const connection = this.sharedb.connect();
+	// 		const doc = connection.get(this.getChannelName(), id);
+	// 		doc.fetch((err) => {
+	// 			if(err) {
+	// 				reject(err);
+	// 			} else if(doc.type === null) {
+	// 				console.log(contents==='');
+	// 				doc.create(contents, 'text', () => {
+	// 					resolve(doc);
+	// 					console.log(`Created new editor (${id}) for channel ${this.getChannelName()}`);
+	// 				});
+	// 			} else {
+	// 				resolve(doc);
+	// 			}
+	// 		});
+	// 	});
+	// };
 }
 
 export class ChatCodesSocketIOServer {

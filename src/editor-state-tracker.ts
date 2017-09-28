@@ -7,6 +7,9 @@ import { ChatUser, ChatUserList } from './chat-user';
 import { Timestamped } from './chat-messages';
 import * as CodeMirror from 'codemirror';
 import * as ShareDB from 'sharedb/lib/client';
+import * as otText from 'ot-text';
+
+ShareDB.types.map['json0'].registerSubtype(otText.type);
 
 interface SerializedRange {
 	start: Array<number>,
@@ -326,6 +329,9 @@ export class EditorState {
             cursors: []
         }, suppliedState);
 
+		this.isOpen = state.isOpen;
+		this.title = state.title;
+
 		this.editorWrapper.setEditorState(this);
 		this.editorID = state.id;
 		if(mustPerformChange) {
@@ -541,31 +547,33 @@ export class EditorState {
 }
 
 export class EditorStateTracker extends EventEmitter {
-    private editorStates:{[editorID:number]: EditorState} = {};
+    private editorStates:Map<number, EditorState> = new Map();
 	private currentTimestamp:number=CURRENT;
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
+		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+			editorDoc.data.forEach((li) => {
+				this.onEditorOpened(li, true);
+			});
+		});
 	}
 
-	public createEditor(id:string, contents:string, grammarName:string, modified:boolean) {
+	public createEditor(id:string, title:string, contents:string, grammarName:string, modified:boolean) {
 		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-			const data = { id, contents, grammarName, modified };
-			editorDoc.submitOp({p: ['editors', editorDoc.data['editors'].length], li: data});
-			console.log(editorDoc);
+			const data = { title, id, contents, grammarName, modified };
+			editorDoc.submitOp({p: [editorDoc.data.length], li: data});
+			editorDoc.on('op', (ops) => {
+				const {li} = ops;
+				ops.forEach((op) => {
+					console.log(op);
+					if(_.has(op, 'li')) {
+						const {li} = op;
+						this.onEditorOpened(li, true);
+					}
+				});
+			});
+			this.onEditorOpened(data, true);
 		});
-		// this.channelCommunicationService.emitEditorOpened({ id, contents });
-			//
-            // this.commLayer.channelService.emitEditorOpened({
-            //     id: id
-            // });
-    		// const openDelta =  {
-    		// 	type: 'open',
-    		// 	id: id,
-    		// 	contents: '',
-    		// 	grammarName: 'None',
-    		// 	title: title,
-    		// 	modified: false
-    		// };
 	}
 
 	public getAllEditors():Array<EditorState> {
@@ -581,8 +589,8 @@ export class EditorStateTracker extends EventEmitter {
 	};
 
 	public getEditorState(editorID:number):EditorState {
-        if(this.editorStates[editorID]) {
-    		return this.editorStates[editorID];
+        if(this.editorStates.has(editorID)) {
+    		return this.editorStates.get(editorID);
         } else {
             return null;
         }
@@ -607,7 +615,7 @@ export class EditorStateTracker extends EventEmitter {
 	};
 
 	public removeUserCursors(user):void {
-		_.each(this.editorStates, (es:EditorState) => {
+		this.editorStates.forEach((es:EditorState) => {
 			es.removeUserCursors(user);
 		});
 	}

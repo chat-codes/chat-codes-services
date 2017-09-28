@@ -1,10 +1,12 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
 const events_1 = require("events");
 const CodeMirror = require("codemirror");
+const ShareDB = require("sharedb/lib/client");
+const otText = require("ot-text");
+ShareDB.types.map['json0'].registerSubtype(otText.type);
 ;
 const CURRENT = -1;
 /*
@@ -296,6 +298,8 @@ class EditorState {
             deltas: [],
             cursors: []
         }, suppliedState);
+        this.isOpen = state.isOpen;
+        this.title = state.title;
         this.editorWrapper.setEditorState(this);
         this.editorID = state.id;
         if (mustPerformChange) {
@@ -531,28 +535,30 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.EditorWrapperClass = EditorWrapperClass;
         this.channelCommunicationService = channelCommunicationService;
         this.userList = userList;
-        this.editorStates = {};
+        this.editorStates = new Map();
         this.currentTimestamp = CURRENT;
-    }
-    createEditor(id, contents, grammarName, modified) {
         this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-            const data = { id, contents, grammarName, modified };
-            editorDoc.submitOp({ p: ['editors', editorDoc.data['editors'].length], li: data });
-            console.log(editorDoc);
+            editorDoc.data.forEach((li) => {
+                this.onEditorOpened(li, true);
+            });
         });
-        // this.channelCommunicationService.emitEditorOpened({ id, contents });
-        //
-        // this.commLayer.channelService.emitEditorOpened({
-        //     id: id
-        // });
-        // const openDelta =  {
-        // 	type: 'open',
-        // 	id: id,
-        // 	contents: '',
-        // 	grammarName: 'None',
-        // 	title: title,
-        // 	modified: false
-        // };
+    }
+    createEditor(id, title, contents, grammarName, modified) {
+        this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+            const data = { title, id, contents, grammarName, modified };
+            editorDoc.submitOp({ p: [editorDoc.data.length], li: data });
+            editorDoc.on('op', (ops) => {
+                const { li } = ops;
+                ops.forEach((op) => {
+                    console.log(op);
+                    if (_.has(op, 'li')) {
+                        const { li } = op;
+                        this.onEditorOpened(li, true);
+                    }
+                });
+            });
+            this.onEditorOpened(data, true);
+        });
     }
     getAllEditors() {
         return Object.keys(this.editorStates).map(k => this.editorStates[k]);
@@ -566,8 +572,8 @@ class EditorStateTracker extends events_1.EventEmitter {
     }
     ;
     getEditorState(editorID) {
-        if (this.editorStates[editorID]) {
-            return this.editorStates[editorID];
+        if (this.editorStates.has(editorID)) {
+            return this.editorStates.get(editorID);
         }
         else {
             return null;
@@ -590,7 +596,7 @@ class EditorStateTracker extends events_1.EventEmitter {
     }
     ;
     removeUserCursors(user) {
-        _.each(this.editorStates, (es) => {
+        this.editorStates.forEach((es) => {
             es.removeUserCursors(user);
         });
     }

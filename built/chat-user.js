@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
 /*
@@ -51,7 +50,6 @@ class ChatUser extends events_1.EventEmitter {
             id: this.id,
             name: this.name,
             typingStatus: this.typingStatus
-            // active: this.active
         };
     }
 }
@@ -64,14 +62,12 @@ class ChatUserList extends events_1.EventEmitter {
         this.activeUsers = new Map();
         this.allUsers = new Map();
         this.chatDocPromise = this.channelService.getShareDBChat();
-        Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
+        this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
             // const [doc, myID] = info;
             const doc = info[0];
             const myID = info[1];
             // const [doc:sharedb.Doc, myID:string] = info;
             // console.log(doc);
-            console.log(doc);
-            console.log(myID);
             _.each(doc.data.allUsers, (oi) => {
                 this.allUsers.set(oi.id, this.createUser(oi, myID));
             });
@@ -117,6 +113,8 @@ class ChatUserList extends events_1.EventEmitter {
                     }
                 });
             });
+        }).then(() => {
+            return true;
         });
     }
     createUser(userInfo, myID) {
