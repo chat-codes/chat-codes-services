@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -60,6 +61,7 @@ class ChatCodesChannelServer {
                 joined: this.getTimestamp(),
                 left: -1,
                 info: {
+                    typingStatus: 'IDLE',
                     name: null,
                     colorIndex: this.colorIndex + 1
                 }

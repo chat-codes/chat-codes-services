@@ -257,23 +257,24 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {string} status IDLE, ACTIVE_TYPING, or IDLE_TYPED
      */
     public sendTypingStatus(status:string):void {
-        const data = {
-            uid: this.myID,
-            type: 'status',
-            status: status,
-            timestamp: this.getTimestamp()
-        };
-        const meUser = this.userList.getMe();
+        Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
+            const myID:string = info[0]
+            const doc:sharedb.Doc = info[1]
 
-        this.commLayer.trigger(this.channelName, 'typing', data);
-
-        (this as any).emit('typing', _.extend({
-            sender: this.userList.getMe()
-        }, data));
-
-        if(meUser) {
-            meUser.setTypingStatus(status);
-        }
+            const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
+            doc.submitOp([{p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status}]);
+        });
+        // const meUser = this.userList.getMe();
+        //
+        // this.commLayer.trigger(this.channelName, 'typing', data);
+        //
+        // (this as any).emit('typing', _.extend({
+        //     sender: this.userList.getMe()
+        // }, data));
+        //
+        // if(meUser) {
+        //     meUser.setTypingStatus(status);
+        // }
     }
 
     /**

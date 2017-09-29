@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const socket_communication_layer_1 = require("./socket-communication-layer");
@@ -232,20 +233,23 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {string} status IDLE, ACTIVE_TYPING, or IDLE_TYPED
      */
     sendTypingStatus(status) {
-        const data = {
-            uid: this.myID,
-            type: 'status',
-            status: status,
-            timestamp: this.getTimestamp()
-        };
-        const meUser = this.userList.getMe();
-        this.commLayer.trigger(this.channelName, 'typing', data);
-        this.emit('typing', _.extend({
-            sender: this.userList.getMe()
-        }, data));
-        if (meUser) {
-            meUser.setTypingStatus(status);
-        }
+        Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
+            const myID = info[0];
+            const doc = info[1];
+            const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
+            doc.submitOp([{ p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status }]);
+        });
+        // const meUser = this.userList.getMe();
+        //
+        // this.commLayer.trigger(this.channelName, 'typing', data);
+        //
+        // (this as any).emit('typing', _.extend({
+        //     sender: this.userList.getMe()
+        // }, data));
+        //
+        // if(meUser) {
+        //     meUser.setTypingStatus(status);
+        // }
     }
     /**
      * The user modified something in the editor

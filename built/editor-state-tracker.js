@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
@@ -541,22 +542,21 @@ class EditorStateTracker extends events_1.EventEmitter {
             editorDoc.data.forEach((li) => {
                 this.onEditorOpened(li, true);
             });
-        });
-    }
-    createEditor(id, title, contents, grammarName, modified) {
-        this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-            const data = { title, id, contents, grammarName, modified };
-            editorDoc.submitOp({ p: [editorDoc.data.length], li: data });
             editorDoc.on('op', (ops) => {
                 const { li } = ops;
                 ops.forEach((op) => {
-                    console.log(op);
                     if (_.has(op, 'li')) {
                         const { li } = op;
                         this.onEditorOpened(li, true);
                     }
                 });
             });
+        });
+    }
+    createEditor(id, title, contents, grammarName, modified) {
+        this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+            const data = { title, id, contents, grammarName, modified };
+            editorDoc.submitOp({ p: [editorDoc.data.length], li: data });
             this.onEditorOpened(data, true);
         });
     }

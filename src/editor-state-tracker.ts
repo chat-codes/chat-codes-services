@@ -555,6 +555,15 @@ export class EditorStateTracker extends EventEmitter {
 			editorDoc.data.forEach((li) => {
 				this.onEditorOpened(li, true);
 			});
+			editorDoc.on('op', (ops) => {
+				const {li} = ops;
+				ops.forEach((op) => {
+					if(_.has(op, 'li')) {
+						const {li} = op;
+						this.onEditorOpened(li, true);
+					}
+				});
+			});
 		});
 	}
 
@@ -562,16 +571,6 @@ export class EditorStateTracker extends EventEmitter {
 		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
 			const data = { title, id, contents, grammarName, modified };
 			editorDoc.submitOp({p: [editorDoc.data.length], li: data});
-			editorDoc.on('op', (ops) => {
-				const {li} = ops;
-				ops.forEach((op) => {
-					console.log(op);
-					if(_.has(op, 'li')) {
-						const {li} = op;
-						this.onEditorOpened(li, true);
-					}
-				});
-			});
 			this.onEditorOpened(data, true);
 		});
 	}

@@ -7,6 +7,7 @@ import * as ShareDB from 'sharedb/lib/client';
  * Represents a single chat user
  */
 export class ChatUser extends EventEmitter {
+    private chatDocPromise:Promise<ShareDB.Doc>;
     /**
      * constructor
      * @param  {boolean} isMe       Whether the user is me or not
@@ -15,8 +16,9 @@ export class ChatUser extends EventEmitter {
      * @param  {boolean} active     Whether this user is currently in the channel
      * @param  {number}  colorIndex The user's color
      */
-    constructor(private isMe:boolean, private id:string, private name:string, private joined:number, private left:number, private colorIndex:number) {
+    constructor(private isMe:boolean, private id:string, private name:string, private joined:number, private left:number, private colorIndex:number, private channelService:ChannelCommunicationService) {
         super();
+        this.chatDocPromise = this.channelService.getShareDBChat();
     }
     private typingStatus:string='IDLE';
     public getIsMe():boolean { return this.isMe; };
@@ -33,6 +35,11 @@ export class ChatUser extends EventEmitter {
 
     public setTypingStatus(status:string) {
         this.typingStatus = status;
+        // this.chatDocPromise.then((doc) => {
+        //     const oldValue = doc.dta['activeUsers'][this.getID()]['info']['typingStatus'];
+        //     doc.submitOp([{p: ['activeUsers', this.getID(), 'info', 'typingStatus'], od: oldValue, oi: this.getTypingStatus()}]);
+        // });
+        // this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
         (this as any).emit('typingStatus', {
             status: status
         });
@@ -72,7 +79,7 @@ export class ChatUserList extends EventEmitter {
                 ops.forEach((op) => {
                     const {p} = op;
                     const [field] = p;
-                    if(field === 'activeUsers' || field === 'allUsers') {
+                    if((field === 'activeUsers' || field === 'allUsers') && (p.length === 2)) {
                         const userMap:Map<string,ChatUser> = field==='activeUsers' ? this.activeUsers : this.allUsers;
 
                         if(_.has(op, 'od') && _.has(op, 'oi')) {
@@ -104,6 +111,15 @@ export class ChatUserList extends EventEmitter {
                                 user: addedUser
                             });
                         }
+                    } else if (_.last(p) === 'typingStatus') {
+                        if(_.has(op, 'oi')) {
+                            const {oi} = op;
+                            const uid:string = p[1];
+                            const user = this.getUser(uid);
+                            user.setTypingStatus(oi);
+                        }
+                    } else {
+                        // console.log(p);
                     }
                 });
             });
@@ -119,7 +135,7 @@ export class ChatUserList extends EventEmitter {
             const {name, colorIndex} = info;
             const isMe = (id === myID);
 
-            user = new ChatUser(isMe, id, name, joined, left, colorIndex);
+            user = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
         }
         return user;
     };

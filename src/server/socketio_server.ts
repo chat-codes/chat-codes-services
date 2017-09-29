@@ -54,6 +54,7 @@ export class ChatCodesChannelServer {
 				joined: this.getTimestamp(),
 				left: -1,
 				info: {
+					typingStatus: 'IDLE',
 					name: null,
 					colorIndex: this.colorIndex+1
 				}

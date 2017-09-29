@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
 /*
@@ -13,7 +14,7 @@ class ChatUser extends events_1.EventEmitter {
      * @param  {boolean} active     Whether this user is currently in the channel
      * @param  {number}  colorIndex The user's color
      */
-    constructor(isMe, id, name, joined, left, colorIndex) {
+    constructor(isMe, id, name, joined, left, colorIndex, channelService) {
         super();
         this.isMe = isMe;
         this.id = id;
@@ -21,7 +22,9 @@ class ChatUser extends events_1.EventEmitter {
         this.joined = joined;
         this.left = left;
         this.colorIndex = colorIndex;
+        this.channelService = channelService;
         this.typingStatus = 'IDLE';
+        this.chatDocPromise = this.channelService.getShareDBChat();
     }
     getIsMe() { return this.isMe; }
     ;
@@ -41,6 +44,11 @@ class ChatUser extends events_1.EventEmitter {
     ;
     setTypingStatus(status) {
         this.typingStatus = status;
+        // this.chatDocPromise.then((doc) => {
+        //     const oldValue = doc.dta['activeUsers'][this.getID()]['info']['typingStatus'];
+        //     doc.submitOp([{p: ['activeUsers', this.getID(), 'info', 'typingStatus'], od: oldValue, oi: this.getTypingStatus()}]);
+        // });
+        // this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
         this.emit('typingStatus', {
             status: status
         });
@@ -50,6 +58,7 @@ class ChatUser extends events_1.EventEmitter {
             id: this.id,
             name: this.name,
             typingStatus: this.typingStatus
+            // active: this.active
         };
     }
 }
@@ -78,7 +87,7 @@ class ChatUserList extends events_1.EventEmitter {
                 ops.forEach((op) => {
                     const { p } = op;
                     const [field] = p;
-                    if (field === 'activeUsers' || field === 'allUsers') {
+                    if ((field === 'activeUsers' || field === 'allUsers') && (p.length === 2)) {
                         const userMap = field === 'activeUsers' ? this.activeUsers : this.allUsers;
                         if (_.has(op, 'od') && _.has(op, 'oi')) {
                             const { od, oi } = op;
@@ -111,6 +120,17 @@ class ChatUserList extends events_1.EventEmitter {
                             });
                         }
                     }
+                    else if (_.last(p) === 'typingStatus') {
+                        if (_.has(op, 'oi')) {
+                            const { oi } = op;
+                            const uid = p[1];
+                            const user = this.getUser(uid);
+                            user.setTypingStatus(oi);
+                        }
+                    }
+                    else {
+                        // console.log(p);
+                    }
                 });
             });
         }).then(() => {
@@ -123,7 +143,7 @@ class ChatUserList extends events_1.EventEmitter {
         if (!user) {
             const { name, colorIndex } = info;
             const isMe = (id === myID);
-            user = new ChatUser(isMe, id, name, joined, left, colorIndex);
+            user = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
         }
         return user;
     }
