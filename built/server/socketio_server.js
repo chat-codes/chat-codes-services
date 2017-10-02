@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -41,6 +42,10 @@ class ChatCodesChannelServer {
         this.colorIndex = 0;
         this.ns = this.io.of(`/${channelName}`);
         this.initialize();
+        Promise.all([this.chatPromise, this.editorsPromise]).then((info) => {
+            const chatDoc = info[0];
+            const editorsDoc = info[1];
+        });
     }
     submitOp(doc, data, options) {
         return new Promise((resolve, reject) => {
@@ -201,6 +206,7 @@ class ChatCodesChannelServer {
         return this.getEditorOps(0, version).then((ops) => {
             _.each(ops, (op) => {
                 if (op['create']) {
+                    // content = _.clone(op['data']);
                 }
                 else {
                     content = jsonType.apply(content, op.op);
@@ -220,6 +226,7 @@ class ChatCodesChannelServer {
         return this.getEditorOps(0, fromVersion).then((ops) => {
             _.each(ops, (op) => {
                 if (op['create']) {
+                    // content = _.clone(op['data']);
                 }
                 else {
                     content = jsonType.apply(content, op.op);
@@ -232,6 +239,7 @@ class ChatCodesChannelServer {
         }).then((ops) => {
             _.each(ops, (op) => {
                 if (op['create']) {
+                    // content = _.clone(op['data']);
                 }
                 else {
                     content = jsonType.apply(content, op.op);
@@ -557,7 +565,6 @@ const optionDefinitions = [
     { name: 'sioport', alias: 'p', type: Number, defaultValue: 8001 }
 ];
 const options = commandLineArgs(optionDefinitions);
-Object.defineProperty(exports, "__esModule", { value: true });
 // const server = new ChatCodesSocketIOServer(options.port, options.dburl);
 exports.default = new ChatCodesSocketIOServer(options.sharedbport, options.sioport, options.mongodb);
 //# sourceMappingURL=socketio_server.js.map

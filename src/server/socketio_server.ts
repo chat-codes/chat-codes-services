@@ -39,6 +39,11 @@ export class ChatCodesChannelServer {
 	constructor(private sharedb, private wss, private channelName:string, private io:SocketIO.Server) {
 		this.ns = this.io.of(`/${channelName}`);
 		this.initialize();
+		Promise.all([this.chatPromise, this.editorsPromise]).then((info) => {
+			const chatDoc:ShareDB.Doc = info[0];
+			const editorsDoc:ShareDB.Doc = info[1];
+
+		}):
 	}
 	private submitOp(doc, data, options?):Promise<ShareDB.Doc> {
 		return new Promise<ShareDB.Doc>((resolve, reject) => {
