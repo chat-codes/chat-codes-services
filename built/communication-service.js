@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const socket_communication_layer_1 = require("./socket-communication-layer");
@@ -246,14 +245,16 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     emitEditorChanged(serializedDelta, remote = true) {
-        _.extend(serializedDelta, {
-            timestamp: this.getTimestamp(),
-            uid: this.myID,
-            remote: remote
+        this.getMyID().then((myID) => {
+            _.extend(serializedDelta, {
+                timestamp: this.getTimestamp(),
+                uid: myID,
+                remote: remote
+            });
+            const delta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
+            // this.messageGroups.addDelta(delta);
+            this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
         });
-        const delta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
-        this.messageGroups.addDelta(delta);
-        this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
     }
     /**
      * The cursor position for the user changed

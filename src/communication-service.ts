@@ -14,7 +14,6 @@ declare var __dirname:string;
 const DEBUG = false;
 const USE_PUSHER = false;
 
-
 /**
  * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
  * numbers to the channel name
@@ -274,14 +273,16 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     public emitEditorChanged(serializedDelta, remote=true):void {
-        _.extend(serializedDelta, {
-			timestamp: this.getTimestamp(),
-            uid: this.myID,
-			remote: remote
+        this.getMyID().then((myID:string) => {
+            _.extend(serializedDelta, {
+    			timestamp: this.getTimestamp(),
+                uid: myID,
+    			remote: remote
+            });
+    		const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
+            // this.messageGroups.addDelta(delta);
+            this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
         });
-		const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
-        this.messageGroups.addDelta(delta);
-        this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
     }
 
     /**

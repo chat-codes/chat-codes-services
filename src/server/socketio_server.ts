@@ -13,6 +13,7 @@ import * as WebSocket from 'ws';
 import * as WebSocketJSONStream from 'websocket-json-stream';
 import * as otText from 'ot-text';
 import * as Logger from 'js-logger';
+import {EventEmitter} from 'events';
 
 Logger.useDefaults();
 
@@ -30,20 +31,89 @@ function getCredentials(filename:string=path.join(__dirname, 'db_creds.json')):P
 		return JSON.parse(contents);
 	});
 }
-export class ChatCodesChannelServer {
+export class ChatCodesChannelServer extends EventEmitter {
 	private members:Set<WebSocket> = new Set<WebSocket>();
 	private ns:SocketIO.Namespace;
 	private chatPromise:Promise<ShareDB.Doc> = this.getShareDBChat();
 	private editorsPromise:Promise<ShareDB.Doc> = this.getShareDBEditors();
 	private cursorsPromise:Promise<ShareDB.Doc> = this.getShareDBCursors();
 	constructor(private sharedb, private wss, private channelName:string, private io:SocketIO.Server) {
+		super();
 		this.ns = this.io.of(`/${channelName}`);
 		this.initialize();
-		Promise.all([this.chatPromise, this.editorsPromise]).then((info) => {
+		Promise.all([this.subscribePromise(this.chatPromise), this.subscribePromise(this.editorsPromise)]).then((info) => {
 			const chatDoc:ShareDB.Doc = info[0];
 			const editorsDoc:ShareDB.Doc = info[1];
 
-		}):
+			let fromVersion:number=editorsDoc.version,
+				toVersion:number=editorsDoc.version;
+			let editedFiles:Set<string> = new Set();
+			let editingUsers:Set<string> = new Set();
+
+			let lastEvent:string = null;
+
+			function createNewEditGroup() {
+				console.log("Created new edit group");
+				editedFiles = new Set();
+				editingUsers = new Set();
+				fromVersion = editorsDoc.version;
+				toVersion = editorsDoc.version;
+			}
+			function capCurrentEditGroup() {
+				console.log("CAP");
+				console.log(editedFiles.values());
+				console.log(editingUsers.values());
+				console.log(fromVersion, toVersion);
+			}
+
+			this.on('editor-event', (info) => {
+				if(lastEvent !== 'edit') {
+					createNewEditGroup();
+				}
+
+				const {uid} = info;
+				editingUsers.add(uid);
+
+				lastEvent = 'edit';
+			});
+
+			chatDoc.on('op', (ops) => {
+				ops.forEach((op, source) => {
+					const {p, li} = op;
+					if(p.length === 2 && p[0] === 'messages' && li && !source) {
+						if(lastEvent !== 'chat') {
+							capCurrentEditGroup();
+						}
+						lastEvent = 'chat';
+					}
+				});
+			});
+			editorsDoc.on('op', (ops) => {
+				ops.forEach((op, source) => {
+					const {p, li} = op;
+					if(p.length === 3 && p[1] === 'contents') {
+						if(lastEvent !== 'edit') {
+							createNewEditGroup();
+						} else {
+							toVersion = editorsDoc.version;
+						}
+
+						editedFiles.add(editorsDoc.data[p[0]].id);
+						lastEvent = 'edit'
+					}
+				});
+			});
+		});
+	}
+	private subscribePromise(docPromise:Promise<ShareDB.Doc>):Promise<ShareDB.Doc> {
+		return docPromise.then((doc) => {
+			return new Promise((resolve, reject) => {
+				doc.subscribe((err) => {
+					if(err) { reject(err); }
+					else { resolve(doc); }
+				});
+			});
+		});
 	}
 	private submitOp(doc, data, options?):Promise<ShareDB.Doc> {
 		return new Promise<ShareDB.Doc>((resolve, reject) => {
@@ -77,14 +147,17 @@ export class ChatCodesChannelServer {
 			// 		callback('ready');
 			// 	});
 			// });
+			s.on('data-editor-event', (info) => {
+				this.emit('editor-event', info);
+			});
 
-			s.on('get-editors-values', (version:number, callback) => {
+			s.on('data-get-editors-values', (version:number, callback) => {
 				return this.getEditorValues(version).then((result) => {
 					console.log(result);
 					callback(result.values());
 				});
 			});
-			s.on('get-editors-diff', (fromVersion:number, toVersion:number, callback) => {
+			s.on('data-get-editors-diff', (fromVersion:number, toVersion:number, callback) => {
 				return this.getEditorDiffs(fromVersion, toVersion).then((result) => {
 					console.log(result);
 					callback(result.values());

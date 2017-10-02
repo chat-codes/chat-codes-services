@@ -583,17 +583,19 @@ export class EditorStateTracker extends EventEmitter {
 		this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
 			_.each(cursorsDoc.data, (cursorInfo:any, editorID:string) => {
 				const editor = this.getEditorState(editorID);
-				const remoteCursors = editor.getRemoteCursors();
-				_.each(cursorInfo['userCursors'], (cursorInfo:any, userID:string) => {
-					const {newBufferPosition} = cursorInfo;
-					const user = this.userList.getUser(userID);
-					if(user) { remoteCursors.updateCursor(user.getID(), user, newBufferPosition); }
-				});
-				_.each(cursorInfo['userSelections'], (selectionInfo:any, userID:string) => {
-					const {newRange} = selectionInfo;
-					const user = this.userList.getUser(userID);
-					if(user) { remoteCursors.updateSelection(user.getID(), user, newRange); }
-				});
+				if(editor) {
+					const remoteCursors = editor.getRemoteCursors();
+					_.each(cursorInfo['userCursors'], (cursorInfo:any, userID:string) => {
+						const {newBufferPosition} = cursorInfo;
+						const user = this.userList.getUser(userID);
+						if(user) { remoteCursors.updateCursor(user.getID(), user, newBufferPosition); }
+					});
+					_.each(cursorInfo['userSelections'], (selectionInfo:any, userID:string) => {
+						const {newRange} = selectionInfo;
+						const user = this.userList.getUser(userID);
+						if(user) { remoteCursors.updateSelection(user.getID(), user, newRange); }
+					});
+				}
 			});
 
 			cursorsDoc.on('op', (ops) => {

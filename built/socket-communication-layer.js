@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const socket_io_client_1 = require("socket.io-client");
 const sharedb = require("sharedb/lib/client");
 class SocketIOCommunicationLayer {
@@ -80,7 +79,7 @@ class SocketIOCommunicationLayer {
     }
     trigger(channelName, eventName, eventContents) {
         this.getNamespace(channelName).then((room) => {
-            room.emit('data', eventName, eventContents);
+            room.emit(`data-${eventName}`, eventContents);
         });
     }
     ;

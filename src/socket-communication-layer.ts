@@ -86,7 +86,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 	}
 	public trigger(channelName:string, eventName:string, eventContents:any):void {
 		this.getNamespace(channelName).then((room) => {
-			room.emit('data', eventName, eventContents);
+			room.emit(`data-${eventName}`, eventContents);
 		});
 	};
 

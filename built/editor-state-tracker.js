@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 //<reference path="./typings/node/node.d.ts" />
 const _ = require("underscore");
 const FuzzySet = require("fuzzyset.js");
@@ -572,21 +571,23 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
             _.each(cursorsDoc.data, (cursorInfo, editorID) => {
                 const editor = this.getEditorState(editorID);
-                const remoteCursors = editor.getRemoteCursors();
-                _.each(cursorInfo['userCursors'], (cursorInfo, userID) => {
-                    const { newBufferPosition } = cursorInfo;
-                    const user = this.userList.getUser(userID);
-                    if (user) {
-                        remoteCursors.updateCursor(user.getID(), user, newBufferPosition);
-                    }
-                });
-                _.each(cursorInfo['userSelections'], (selectionInfo, userID) => {
-                    const { newRange } = selectionInfo;
-                    const user = this.userList.getUser(userID);
-                    if (user) {
-                        remoteCursors.updateSelection(user.getID(), user, newRange);
-                    }
-                });
+                if (editor) {
+                    const remoteCursors = editor.getRemoteCursors();
+                    _.each(cursorInfo['userCursors'], (cursorInfo, userID) => {
+                        const { newBufferPosition } = cursorInfo;
+                        const user = this.userList.getUser(userID);
+                        if (user) {
+                            remoteCursors.updateCursor(user.getID(), user, newBufferPosition);
+                        }
+                    });
+                    _.each(cursorInfo['userSelections'], (selectionInfo, userID) => {
+                        const { newRange } = selectionInfo;
+                        const user = this.userList.getUser(userID);
+                        if (user) {
+                            remoteCursors.updateSelection(user.getID(), user, newRange);
+                        }
+                    });
+                }
             });
             cursorsDoc.on('op', (ops) => {
                 ops.forEach((op) => {

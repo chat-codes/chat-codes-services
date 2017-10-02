@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const sio = require("socket.io");
 const _ = require("underscore");
 const commandLineArgs = require("command-line-args");
@@ -14,6 +13,7 @@ const WebSocket = require("ws");
 const WebSocketJSONStream = require("websocket-json-stream");
 const otText = require("ot-text");
 const Logger = require("js-logger");
+const events_1 = require("events");
 Logger.useDefaults();
 ShareDB.types.map['json0'].registerSubtype(otText.type);
 pg.defaults.ssl = true;
@@ -29,8 +29,9 @@ function getCredentials(filename = path.join(__dirname, 'db_creds.json')) {
         return JSON.parse(contents);
     });
 }
-class ChatCodesChannelServer {
+class ChatCodesChannelServer extends events_1.EventEmitter {
     constructor(sharedb, wss, channelName, io) {
+        super();
         this.sharedb = sharedb;
         this.wss = wss;
         this.channelName = channelName;
@@ -42,9 +43,74 @@ class ChatCodesChannelServer {
         this.colorIndex = 0;
         this.ns = this.io.of(`/${channelName}`);
         this.initialize();
-        Promise.all([this.chatPromise, this.editorsPromise]).then((info) => {
+        Promise.all([this.subscribePromise(this.chatPromise), this.subscribePromise(this.editorsPromise)]).then((info) => {
             const chatDoc = info[0];
             const editorsDoc = info[1];
+            let fromVersion = editorsDoc.version, toVersion = editorsDoc.version;
+            let editedFiles = new Set();
+            let editingUsers = new Set();
+            let lastEvent = null;
+            function createNewEditGroup() {
+                console.log("Created new edit group");
+                editedFiles = new Set();
+                editingUsers = new Set();
+                fromVersion = editorsDoc.version;
+                toVersion = editorsDoc.version;
+            }
+            function capCurrentEditGroup() {
+                console.log("CAP");
+                console.log(editedFiles.values());
+                console.log(editingUsers.values());
+                console.log(fromVersion, toVersion);
+            }
+            this.on('editor-event', (info) => {
+                if (lastEvent !== 'edit') {
+                    createNewEditGroup();
+                }
+                const { uid } = info;
+                editingUsers.add(uid);
+                lastEvent = 'edit';
+            });
+            chatDoc.on('op', (ops) => {
+                ops.forEach((op, source) => {
+                    const { p, li } = op;
+                    if (p.length === 2 && p[0] === 'messages' && li && !source) {
+                        if (lastEvent !== 'chat') {
+                            capCurrentEditGroup();
+                        }
+                        lastEvent = 'chat';
+                    }
+                });
+            });
+            editorsDoc.on('op', (ops) => {
+                ops.forEach((op, source) => {
+                    const { p, li } = op;
+                    if (p.length === 3 && p[1] === 'contents') {
+                        if (lastEvent !== 'edit') {
+                            createNewEditGroup();
+                        }
+                        else {
+                            toVersion = editorsDoc.version;
+                        }
+                        editedFiles.add(editorsDoc.data[p[0]].id);
+                        lastEvent = 'edit';
+                    }
+                });
+            });
+        });
+    }
+    subscribePromise(docPromise) {
+        return docPromise.then((doc) => {
+            return new Promise((resolve, reject) => {
+                doc.subscribe((err) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(doc);
+                    }
+                });
+            });
         });
     }
     submitOp(doc, data, options) {
@@ -80,13 +146,16 @@ class ChatCodesChannelServer {
             // 		callback('ready');
             // 	});
             // });
-            s.on('get-editors-values', (version, callback) => {
+            s.on('data-editor-event', (info) => {
+                this.emit('editor-event', info);
+            });
+            s.on('data-get-editors-values', (version, callback) => {
                 return this.getEditorValues(version).then((result) => {
                     console.log(result);
                     callback(result.values());
                 });
             });
-            s.on('get-editors-diff', (fromVersion, toVersion, callback) => {
+            s.on('data-get-editors-diff', (fromVersion, toVersion, callback) => {
                 return this.getEditorDiffs(fromVersion, toVersion).then((result) => {
                     console.log(result);
                     callback(result.values());
@@ -206,7 +275,6 @@ class ChatCodesChannelServer {
         return this.getEditorOps(0, version).then((ops) => {
             _.each(ops, (op) => {
                 if (op['create']) {
-                    // content = _.clone(op['data']);
                 }
                 else {
                     content = jsonType.apply(content, op.op);
@@ -226,7 +294,6 @@ class ChatCodesChannelServer {
         return this.getEditorOps(0, fromVersion).then((ops) => {
             _.each(ops, (op) => {
                 if (op['create']) {
-                    // content = _.clone(op['data']);
                 }
                 else {
                     content = jsonType.apply(content, op.op);
@@ -239,7 +306,6 @@ class ChatCodesChannelServer {
         }).then((ops) => {
             _.each(ops, (op) => {
                 if (op['create']) {
-                    // content = _.clone(op['data']);
                 }
                 else {
                     content = jsonType.apply(content, op.op);
@@ -565,6 +631,7 @@ const optionDefinitions = [
     { name: 'sioport', alias: 'p', type: Number, defaultValue: 8001 }
 ];
 const options = commandLineArgs(optionDefinitions);
+Object.defineProperty(exports, "__esModule", { value: true });
 // const server = new ChatCodesSocketIOServer(options.port, options.dburl);
 exports.default = new ChatCodesSocketIOServer(options.sharedbport, options.sioport, options.mongodb);
 //# sourceMappingURL=socketio_server.js.map
