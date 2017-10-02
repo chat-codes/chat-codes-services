@@ -29,45 +29,57 @@ export class RemoteCursorMarker extends EventEmitter {
     constructor(private editorState:EditorState) {
 		super();
 	}
-	private cursors:{[cursorID:number]:any} = {};
+	private cursors:Map<number, any> = new Map();
 	public updateCursor(id, user, pos:SerializedPos) {
-		if(!this.cursors[id]) {
-			this.cursors[id] = { id: id, user: user };
-			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
-		}
+		if(!user.getIsMe()) {
+			let cursor;
+			if(this.cursors.has(id)) {
+				cursor = this.cursors.get(id);
+			} else {
+				cursor = {id: id, user: user};
+				this.cursors.set(id, cursor);
+				this.editorState.getEditorWrapper().addRemoteCursor(cursor, this);
+			}
 
-		let oldPos = this.cursors[id].pos;
-		this.cursors[id].pos = pos;
+			const oldPos = cursor.pos;
+			cursor.pos = pos;
 
-		if(oldPos) {
-			this.editorState.getEditorWrapper().updateRemoteCursorPosition(this.cursors[id], this);
-		} else {
-			this.editorState.getEditorWrapper().addRemoteCursorPosition(this.cursors[id], this);
+			if(oldPos) {
+				this.editorState.getEditorWrapper().updateRemoteCursorPosition(cursor, this);
+			} else {
+				this.editorState.getEditorWrapper().addRemoteCursorPosition(cursor, this);
+			}
 		}
 	};
 	public updateSelection(id, user, range:SerializedRange) {
-		if(!this.cursors[id]) {
-			this.cursors[id] = { id: id, user: user };
-			this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
-		}
+		if(!user.getIsMe()) {
+			let cursor;
+			if(this.cursors.has(id)) {
+				cursor = this.cursors.get(id);
+			} else {
+				cursor = {id: id, user: user};
+				this.cursors.set(id, { id: id, user: user });
+				this.editorState.getEditorWrapper().addRemoteCursor(cursor, this);
+			}
 
-		let oldRange = this.cursors[id].range;
-		this.cursors[id].range = range;
+			const oldRange = cursor.range;
+			cursor.range = range;
 
-		if(oldRange) {
-			this.editorState.getEditorWrapper().updateRemoteCursorSelection(this.cursors[id], this);
-		} else {
-			this.editorState.getEditorWrapper().addRemoteCursorSelection(this.cursors[id], this);
+			if(oldRange) {
+				this.editorState.getEditorWrapper().updateRemoteCursorSelection(cursor, this);
+			} else {
+				this.editorState.getEditorWrapper().addRemoteCursorSelection(cursor, this);
+			}
 		}
 	};
     public removeCursor(id, user) {
-		if(this.cursors[id]) {
-			this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors[id], this);
-			delete this.cursors[id];
+		if(this.cursors.has(id)) {
+			this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors.get(id), this);
+			this.cursors.delete(id);
 		}
     }
 	public getCursors() {
-		return this.cursors;
+		return Array.from(this.cursors.values());
 	}
 	public serialize() {
 		return {
@@ -75,7 +87,7 @@ export class RemoteCursorMarker extends EventEmitter {
 		};
 	}
 	public removeUserCursors(user) {
-		_.each(this.cursors, (cursor:any, id) => {
+		this.cursors.forEach((cursor:any, id) => {
 			if(cursor.user.id === user.id) {
 				this.removeCursor(id, user);
 			}
@@ -547,7 +559,7 @@ export class EditorState {
 }
 
 export class EditorStateTracker extends EventEmitter {
-    private editorStates:Map<number, EditorState> = new Map();
+    private editorStates:Map<string, EditorState> = new Map();
 	private currentTimestamp:number=CURRENT;
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
@@ -556,11 +568,36 @@ export class EditorStateTracker extends EventEmitter {
 				this.onEditorOpened(li, true);
 			});
 			editorDoc.on('op', (ops) => {
-				const {li} = ops;
 				ops.forEach((op) => {
-					if(_.has(op, 'li')) {
-						const {li} = op;
-						this.onEditorOpened(li, true);
+					const {p} = op;
+					if(p.length === 1) { // new editor
+						if(_.has(op, 'li')) {
+							const {li} = op;
+							this.onEditorOpened(li, true);
+						}
+					}
+
+					if(p.length === 3) {
+						const editorID = editorDoc.data[p[0]]['id'];
+						const editor = this.getEditorState(editorID);
+						const isUserCursor:boolean = p[1] === 'userCursors';
+						const isUserSelection:boolean = p[1] === 'userSelections';
+
+						if(isUserCursor || isUserSelection) {
+							const remoteCursors = editor.getRemoteCursors();
+							const userID:string = p[2];
+							const user = this.userList.getUser(userID);
+							const {oi, od} = op;
+							if(oi) {
+								if(isUserCursor) {
+									remoteCursors.updateCursor(user.getID(), user, oi.newBufferPosition);
+								} else if(isUserSelection) {
+									remoteCursors.updateSelection(user.getID(), user, oi.newRange);
+								}
+							} else if(od) {
+								remoteCursors.removeUserCursors(user);
+							}
+						}
 					}
 				});
 			});
@@ -569,14 +606,14 @@ export class EditorStateTracker extends EventEmitter {
 
 	public createEditor(id:string, title:string, contents:string, grammarName:string, modified:boolean) {
 		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-			const data = { title, id, contents, grammarName, modified };
+			const data = { title, id, contents, grammarName, modified, userCursors:{}, userSelections:{} };
 			editorDoc.submitOp({p: [editorDoc.data.length], li: data});
 			this.onEditorOpened(data, true);
 		});
 	}
 
 	public getAllEditors():Array<EditorState> {
-		return Object.keys(this.editorStates).map(k => this.editorStates[k]);
+		return Array.from(this.editorStates.values());
 	}
 
 	public handleEvent(event, mustPerformChange:boolean):UndoableDelta {
@@ -587,7 +624,7 @@ export class EditorStateTracker extends EventEmitter {
 		return null;
 	};
 
-	public getEditorState(editorID:number):EditorState {
+	public getEditorState(editorID:string):EditorState {
         if(this.editorStates.has(editorID)) {
     		return this.editorStates.get(editorID);
         } else {
@@ -601,17 +638,15 @@ export class EditorStateTracker extends EventEmitter {
 	}
 
 	public onEditorOpened(state, mustPerformChange:boolean):EditorState {
-		let editorState = this.getEditorState(state.id);
-		if(!editorState) {
-			editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
-			this.editorStates[state.id] = editorState;
+		const {id} = state;
+		if(this.editorStates.has(id)) {
+			return this.editorStates.get(id);
+		} else {
+			const editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
+			this.editorStates.set(id, editorState);
+			return editorState;
 		}
-		return editorState;
 	}
-
-	public serializeEditorStates() {
-		return _.mapObject(this.editorStates, (editorState:EditorState) => (editorState.serialize()));
-	};
 
 	public removeUserCursors(user):void {
 		this.editorStates.forEach((es:EditorState) => {

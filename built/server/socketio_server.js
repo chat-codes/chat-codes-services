@@ -106,7 +106,20 @@ class ChatCodesChannelServer {
                 }).then((chatDoc) => {
                     member.left = this.getTimestamp();
                     return this.submitOp(chatDoc, [{ p: ['activeUsers', id], od: member }]);
+                }).then(() => {
+                    return this.fetchDocFromPromise(this.editorsPromise);
+                }).then((editorsDoc) => {
+                    const removeCursorsPromises = _.chain(editorsDoc.data)
+                        .map((ed, i) => {
+                        const ucd = ed['userCursors'][id];
+                        const usd = ed['userSelections'][id];
+                        return Promise.all([this.submitOp(editorsDoc, [{ p: [i, 'userCursors', id], od: ucd }]), this.submitOp(editorsDoc, [{ p: [i, 'userSelections', id], od: ucd }])]);
+                    })
+                        .flatten(true)
+                        .value();
+                    return Promise.all(removeCursorsPromises);
                 });
+                console.log(`Client (${id} in ${this.getChannelName()}) disconnected`);
             });
             console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
         });
@@ -119,6 +132,21 @@ class ChatCodesChannelServer {
             return true;
         });
     }
+    fetchDocFromPromise(docPromise) {
+        return docPromise.then((doc) => {
+            return new Promise((resolve, reject) => {
+                doc.fetch((err) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(doc);
+                    }
+                });
+            });
+        });
+    }
+    ;
     getTimestamp() { return (new Date()).getTime(); }
     ;
     addMember(member) {
@@ -158,7 +186,7 @@ class ChatCodesChannelServer {
     getShareDBEditors() {
         return new Promise((resolve, reject) => {
             const connection = this.sharedb.connect();
-            connection.debug = true;
+            // connection.debug = true;
             const doc = connection.get(this.getChannelName(), 'editors');
             const contents = [];
             doc.fetch((err) => {

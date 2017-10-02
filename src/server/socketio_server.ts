@@ -102,7 +102,20 @@ export class ChatCodesChannelServer {
 				}).then((chatDoc:ShareDB.Doc) => {
 					member.left = this.getTimestamp();
 					return this.submitOp(chatDoc, [{p: ['activeUsers', id], od: member}]);
+				}).then(() => {
+					return this.fetchDocFromPromise(this.editorsPromise);
+				}).then((editorsDoc:ShareDB.Doc) => {
+					const removeCursorsPromises = _.chain(editorsDoc.data)
+													.map((ed, i) => {
+														const ucd = ed['userCursors'][id];
+														const usd = ed['userSelections'][id];
+														return Promise.all([this.submitOp(editorsDoc, [{p: [i, 'userCursors', id], od: ucd}]), this.submitOp(editorsDoc, [{p: [i, 'userSelections', id], od: ucd}])]);
+													})
+													.flatten(true)
+													.value();
+					return Promise.all(removeCursorsPromises);
 				});
+				console.log(`Client (${id} in ${this.getChannelName()}) disconnected`);
 			});
 
 			console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
@@ -116,6 +129,17 @@ export class ChatCodesChannelServer {
 			return true;
 		})
 	}
+	public fetchDocFromPromise(docPromise:Promise<ShareDB.Doc>):Promise<ShareDB.Doc> {
+		return docPromise.then((doc) => {
+			return new Promise<ShareDB.Doc>((resolve, reject) => {
+				doc.fetch((err) => {
+					if(err) { reject(err); }
+					else { resolve(doc); }
+				});
+			});
+		});
+	};
+
 	private getTimestamp():number { return (new Date()).getTime(); };
 	public addMember(member:WebSocket) {
 		this.members.add(member);
@@ -150,7 +174,7 @@ export class ChatCodesChannelServer {
 	private getShareDBEditors():Promise<any> {
 		return new Promise((resolve, reject) => {
 			const connection = this.sharedb.connect();
-			connection.debug = true;
+			// connection.debug = true;
 			const doc = connection.get(this.getChannelName(), 'editors');
 			const contents = [];
 			doc.fetch((err) => {

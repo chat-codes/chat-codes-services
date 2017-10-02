@@ -17,46 +17,60 @@ class RemoteCursorMarker extends events_1.EventEmitter {
     constructor(editorState) {
         super();
         this.editorState = editorState;
-        this.cursors = {};
+        this.cursors = new Map();
     }
     updateCursor(id, user, pos) {
-        if (!this.cursors[id]) {
-            this.cursors[id] = { id: id, user: user };
-            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
-        }
-        let oldPos = this.cursors[id].pos;
-        this.cursors[id].pos = pos;
-        if (oldPos) {
-            this.editorState.getEditorWrapper().updateRemoteCursorPosition(this.cursors[id], this);
-        }
-        else {
-            this.editorState.getEditorWrapper().addRemoteCursorPosition(this.cursors[id], this);
+        if (!user.getIsMe()) {
+            let cursor;
+            if (this.cursors.has(id)) {
+                cursor = this.cursors.get(id);
+            }
+            else {
+                cursor = { id: id, user: user };
+                this.cursors.set(id, cursor);
+                this.editorState.getEditorWrapper().addRemoteCursor(cursor, this);
+            }
+            const oldPos = cursor.pos;
+            cursor.pos = pos;
+            if (oldPos) {
+                this.editorState.getEditorWrapper().updateRemoteCursorPosition(cursor, this);
+            }
+            else {
+                this.editorState.getEditorWrapper().addRemoteCursorPosition(cursor, this);
+            }
         }
     }
     ;
     updateSelection(id, user, range) {
-        if (!this.cursors[id]) {
-            this.cursors[id] = { id: id, user: user };
-            this.editorState.getEditorWrapper().addRemoteCursor(this.cursors[id], this);
-        }
-        let oldRange = this.cursors[id].range;
-        this.cursors[id].range = range;
-        if (oldRange) {
-            this.editorState.getEditorWrapper().updateRemoteCursorSelection(this.cursors[id], this);
-        }
-        else {
-            this.editorState.getEditorWrapper().addRemoteCursorSelection(this.cursors[id], this);
+        if (!user.getIsMe()) {
+            let cursor;
+            if (this.cursors.has(id)) {
+                cursor = this.cursors.get(id);
+            }
+            else {
+                cursor = { id: id, user: user };
+                this.cursors.set(id, { id: id, user: user });
+                this.editorState.getEditorWrapper().addRemoteCursor(cursor, this);
+            }
+            const oldRange = cursor.range;
+            cursor.range = range;
+            if (oldRange) {
+                this.editorState.getEditorWrapper().updateRemoteCursorSelection(cursor, this);
+            }
+            else {
+                this.editorState.getEditorWrapper().addRemoteCursorSelection(cursor, this);
+            }
         }
     }
     ;
     removeCursor(id, user) {
-        if (this.cursors[id]) {
-            this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors[id], this);
-            delete this.cursors[id];
+        if (this.cursors.has(id)) {
+            this.editorState.getEditorWrapper().removeRemoteCursor(this.cursors.get(id), this);
+            this.cursors.delete(id);
         }
     }
     getCursors() {
-        return this.cursors;
+        return Array.from(this.cursors.values());
     }
     serialize() {
         return {
@@ -64,7 +78,7 @@ class RemoteCursorMarker extends events_1.EventEmitter {
         };
     }
     removeUserCursors(user) {
-        _.each(this.cursors, (cursor, id) => {
+        this.cursors.forEach((cursor, id) => {
             if (cursor.user.id === user.id) {
                 this.removeCursor(id, user);
             }
@@ -543,11 +557,36 @@ class EditorStateTracker extends events_1.EventEmitter {
                 this.onEditorOpened(li, true);
             });
             editorDoc.on('op', (ops) => {
-                const { li } = ops;
                 ops.forEach((op) => {
-                    if (_.has(op, 'li')) {
-                        const { li } = op;
-                        this.onEditorOpened(li, true);
+                    const { p } = op;
+                    if (p.length === 1) {
+                        if (_.has(op, 'li')) {
+                            const { li } = op;
+                            this.onEditorOpened(li, true);
+                        }
+                    }
+                    if (p.length === 3) {
+                        const editorID = editorDoc.data[p[0]]['id'];
+                        const editor = this.getEditorState(editorID);
+                        const isUserCursor = p[1] === 'userCursors';
+                        const isUserSelection = p[1] === 'userSelections';
+                        if (isUserCursor || isUserSelection) {
+                            const remoteCursors = editor.getRemoteCursors();
+                            const userID = p[2];
+                            const user = this.userList.getUser(userID);
+                            const { oi, od } = op;
+                            if (oi) {
+                                if (isUserCursor) {
+                                    remoteCursors.updateCursor(user.getID(), user, oi.newBufferPosition);
+                                }
+                                else if (isUserSelection) {
+                                    remoteCursors.updateSelection(user.getID(), user, oi.newRange);
+                                }
+                            }
+                            else if (od) {
+                                remoteCursors.removeUserCursors(user);
+                            }
+                        }
                     }
                 });
             });
@@ -555,13 +594,13 @@ class EditorStateTracker extends events_1.EventEmitter {
     }
     createEditor(id, title, contents, grammarName, modified) {
         this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-            const data = { title, id, contents, grammarName, modified };
+            const data = { title, id, contents, grammarName, modified, userCursors: {}, userSelections: {} };
             editorDoc.submitOp({ p: [editorDoc.data.length], li: data });
             this.onEditorOpened(data, true);
         });
     }
     getAllEditors() {
-        return Object.keys(this.editorStates).map(k => this.editorStates[k]);
+        return Array.from(this.editorStates.values());
     }
     handleEvent(event, mustPerformChange) {
         const editorState = this.getEditorState(event.id);
@@ -584,17 +623,16 @@ class EditorStateTracker extends events_1.EventEmitter {
         return rv;
     }
     onEditorOpened(state, mustPerformChange) {
-        let editorState = this.getEditorState(state.id);
-        if (!editorState) {
-            editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
-            this.editorStates[state.id] = editorState;
+        const { id } = state;
+        if (this.editorStates.has(id)) {
+            return this.editorStates.get(id);
         }
-        return editorState;
+        else {
+            const editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
+            this.editorStates.set(id, editorState);
+            return editorState;
+        }
     }
-    serializeEditorStates() {
-        return _.mapObject(this.editorStates, (editorState) => (editorState.serialize()));
-    }
-    ;
     removeUserCursors(user) {
         this.editorStates.forEach((es) => {
             es.removeUserCursors(user);

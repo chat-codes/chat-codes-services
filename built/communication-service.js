@@ -271,24 +271,53 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} delta       Information about the cursor position
      * @param {[type]} remote=true Whether this was from a remote user
      */
-    emitCursorPositionChanged(delta, remote = true) {
-        this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
-            timestamp: this.getTimestamp(),
-            uid: this.myID,
-            remote: remote
-        }, delta));
+    onCursorPositionChanged(delta) {
+        Promise.all([this.getMyID(), this.getShareDBEditors()]).then((info) => {
+            const myID = info[0];
+            const doc = info[1];
+            for (let i = 0; i < doc.data.length; i++) {
+                let editorState = doc.data[i];
+                if (editorState.id === delta.editorID) {
+                    const oldDelta = editorState.userCursors[myID];
+                    // const {newBufferPosition} = delta;
+                    doc.submitOp({ p: [i, 'userCursors', myID], od: oldDelta, oi: delta });
+                    break;
+                }
+            }
+            // const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
+            // doc.submitOp([{p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status}]);
+        });
+        // this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
+        // 	timestamp: this.getTimestamp(),
+        //     uid: this.myID,
+        // 	remote: remote
+        // }, delta));
     }
     /**
      * The selected content for the user has changed
      * @param {[type]} delta       Information about the selection
      * @param {[type]} remote=true Whether this was from a remote user
      */
-    emitCursorSelectionChanged(delta, remote = true) {
-        this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
-            timestamp: this.getTimestamp(),
-            uid: this.myID,
-            remote: remote
-        }, delta));
+    onCursorSelectionChanged(delta) {
+        Promise.all([this.getMyID(), this.getShareDBEditors()]).then((info) => {
+            const myID = info[0];
+            const doc = info[1];
+            for (let i = 0; i < doc.data.length; i++) {
+                let editorState = doc.data[i];
+                if (editorState.id === delta.editorID) {
+                    const oldDelta = editorState.userSelections[myID];
+                    doc.submitOp({ p: [i, 'userSelections', myID], od: oldDelta, oi: delta });
+                    break;
+                }
+            }
+        });
+        // const uid = this.getMyID();
+        // console.log(delta);
+        // this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
+        // 	timestamp: this.getTimestamp(),
+        //     uid: this.myID,
+        // 	remote: remote
+        // }, delta));
     }
     /**
      * Called when the terminal outputs something

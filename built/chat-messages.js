@@ -301,7 +301,7 @@ class ConnectionMessageGroup extends Group {
     isConnect() { return this.getEarliestItem().isConnect(); }
     isDisconnect() { return this.getEarliestItem().isDisconnect(); }
     compatibleWith(item) {
-        return (item instanceof ConnectionMessage) && (this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect());
+        return (item instanceof ConnectionMessage) && ((this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect()));
     }
     ;
     constructNew(items) {
