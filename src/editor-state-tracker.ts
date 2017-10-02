@@ -564,6 +564,7 @@ export class EditorStateTracker extends EventEmitter {
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
 		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+			console.log(editorDoc);
 			editorDoc.data.forEach((li) => {
 				this.onEditorOpened(li, true);
 			});

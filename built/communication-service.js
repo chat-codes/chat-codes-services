@@ -1,5 +1,4 @@
 "use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const chat_user_1 = require("./chat-user");
 const socket_communication_layer_1 = require("./socket-communication-layer");
@@ -200,16 +199,18 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {string} message The text of the message to send
      */
     sendTextMessage(message) {
-        Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
+        Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then((info) => {
             const myID = info[0];
-            const doc = info[1];
+            const chatDoc = info[1];
+            const editorsDoc = info[1];
             const data = {
                 uid: myID,
                 type: 'text',
                 message: message,
-                timestamp: this.getTimestamp()
+                timestamp: this.getTimestamp(),
+                editorsVersion: editorsDoc.version
             };
-            doc.submitOp([{ p: ['messages', doc.data.messages.length], li: data }]);
+            chatDoc.submitOp([{ p: ['messages', chatDoc.data.messages.length], li: data }]);
         });
     }
     /**

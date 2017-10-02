@@ -4,6 +4,7 @@ import * as sharedb from 'sharedb/lib/client';
 import * as _ from 'underscore';
 import * as textType from 'ot-text';
 import * as json0Type from 'ot-json0';
+declare var window;
 
 export class SocketIOCommunicationLayer implements CommunicationLayer {
 	private manager:Promise<SocketIOClient.Manager>;
@@ -27,6 +28,7 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 						const ws = new WebSocket(`ws://${authInfo.host}:${shareDBPort}`);
 						ws.addEventListener('open', function (event) {
 							const connection = new sharedb.Connection(ws);
+							window.connection = connection;
 							resolve(connection);
 						});
 					});

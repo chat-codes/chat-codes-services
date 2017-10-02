@@ -21,6 +21,7 @@
         "difflib": "^0.2.4",
         "express": "^4.15.4",
         "fuzzyset.js": "0.0.4",
+        "js-logger": "^1.4.1",
         "logdown": "^3.1.0",
         "ot-text": "^1.0.1",
         "pg": "^7.3.0",
@@ -40,6 +41,7 @@
         "browserify": "^14.4.0",
         "bufferutil": "^3.0.2",
         "pg-native": "^2.2.0",
+        "sharedb-mingo-memory": "^1.0.0-beta",
         "utf-8-validate": "^3.0.3"
     }
 }

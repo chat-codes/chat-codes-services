@@ -6,11 +6,15 @@ import * as path from 'path';
 import * as pg from 'pg';
 import * as ShareDB from 'sharedb';
 import * as ShareDBMongo from 'sharedb-mongo';
+import * as ShareDBMingo from 'sharedb-mingo-memory';
 import * as express from 'express';
 import * as http from 'http';
 import * as WebSocket from 'ws';
 import * as WebSocketJSONStream from 'websocket-json-stream';
 import * as otText from 'ot-text';
+import * as Logger from 'js-logger';
+
+Logger.useDefaults();
 
 ShareDB.types.map['json0'].registerSubtype(otText.type);
 
@@ -69,6 +73,19 @@ export class ChatCodesChannelServer {
 			// 	});
 			// });
 
+			s.on('get-editors-values', (version:number, callback) => {
+				return this.getEditorValues(version).then((result) => {
+					console.log(result);
+					callback(result.values());
+				});
+			});
+			s.on('get-editors-diff', (fromVersion:number, toVersion:number, callback) => {
+				return this.getEditorDiffs(fromVersion, toVersion).then((result) => {
+					console.log(result);
+					callback(result.values());
+				});
+			});
+
 			s.on('set-username', (username:string, callback) => {
 				member.info.name = username;
 				Promise.all([this.chatPromise]).then((result) => {
@@ -88,7 +105,7 @@ export class ChatCodesChannelServer {
 						myID: id
 					});
 				});
-				console.log(`Client (${id} in ${this.getChannelName()}) set username to ${username}`);
+				Logger.info(`Client (${id} in ${this.getChannelName()}) set username to ${username}`);
 			});
 
 			s.on('disconnect', () => {
@@ -116,10 +133,10 @@ export class ChatCodesChannelServer {
 													.value();
 					return Promise.all(removeCursorsPromises);
 				});
-				console.log(`Client (${id} in ${this.getChannelName()}) disconnected`);
+				Logger.info(`Client (${id} in ${this.getChannelName()}) disconnected`);
 			});
 
-			console.log(`Client connected to namespace ${this.getChannelName()} (${id})`);
+			Logger.info(`Client connected to namespace ${this.getChannelName()} (${id})`);
 		});
 		return Promise.all([this.chatPromise]).then(([chatDoc]) => {
 			return true;
@@ -155,6 +172,7 @@ export class ChatCodesChannelServer {
 					reject(err);
 				} else if(doc.type === null) {
 					doc.create(defaultContents, type, () => {
+						Logger.debug(`Created doc ${docName}`);
 						resolve(doc);
 					});
 				} else {
@@ -166,6 +184,87 @@ export class ChatCodesChannelServer {
 	private getShareDBChat():Promise<ShareDB.Doc> { return this.getShareDBObject('chat', 'json0', { 'activeUsers': {}, 'allUsers': {}, 'messages': [], }); };
 	private getShareDBEditors():Promise<ShareDB.Doc> { return this.getShareDBObject('editors', 'json0', []); };
 	private getShareDBCursors():Promise<ShareDB.Doc> { return this.getShareDBObject('cursors', 'json0', {}); };
+	private getEditorValues(version:number):Promise<Map<string, any>> {
+		let content = [];
+		let editorValues:Map<string, any> = new Map<string, any>();
+		const jsonType = ShareDB.types.map['json0'];
+
+		return this.getEditorOps(0, version).then((ops) => {
+			_.each(ops, (op) => {
+				if(op['create']) {
+					// content = _.clone(op['data']);
+				} else {
+					content = jsonType.apply(content, op.op);
+				}
+			});
+			_.each(content, (editorInfo) => {
+				editorValues.set(editorInfo.id, editorInfo);
+			});
+			return editorValues;
+		});
+	}
+	private getEditorDiffs(fromVersion:number, toVersion:number):Promise<Map<string, any>> {
+		let content = [];
+		let editorFromValues:Map<string, any> = new Map<string, any>();
+		let editorToValues:Map<string, any> = new Map<string, any>();
+		const jsonType = ShareDB.types.map['json0'];
+
+		return this.getEditorOps(0, fromVersion).then((ops) => {
+			_.each(ops, (op) => {
+				if(op['create']) {
+					// content = _.clone(op['data']);
+				} else {
+					content = jsonType.apply(content, op.op);
+				}
+			});
+			_.each(content, (editorInfo) => {
+				editorFromValues.set(editorInfo.id, editorInfo);
+			});
+			return this.getEditorOps(fromVersion, toVersion);
+		}).then((ops) => {
+			_.each(ops, (op) => {
+				if(op['create']) {
+					// content = _.clone(op['data']);
+				} else {
+					content = jsonType.apply(content, op.op);
+				}
+			});
+			_.each(content, (editorInfo) => {
+				editorToValues.set(editorInfo.id, editorInfo);
+			});
+
+			const rv:Map<string, any> = new Map<string, any>();
+			editorFromValues.forEach((editorInfo) => {
+				rv.set(editorInfo.id, {
+					editorID: editorInfo.id,
+					fromContents: editorInfo.contents,
+					toContents: ''
+				});
+			});
+			editorToValues.forEach((editorInfo) => {
+				if(rv.has(editorInfo.id)) {
+					_.extend(rv.get(editorInfo.id), {
+						toContents: editorInfo.contents
+					})
+				} else {
+					rv.set(editorInfo.id, {
+						editorID: editorInfo.id,
+						fromContents: '',
+						toContents: editorInfo.contents
+					});
+				}
+			});
+			return rv;
+		});
+	}
+	private getEditorOps(fromVersion:number, toVersion:number, opts={}):Promise<Array<any>> {
+		return new Promise<Array<any>>((resolve, reject) => {
+			this.sharedb.db.getOps(this.getChannelName(), 'editors', fromVersion, toVersion, opts, (err, data) => {
+				if(err) { reject(err); }
+				else { resolve(data); }
+			});
+		});
+	};
 	//
 	// private getShareDBDoc(id:string, contents:string):Promise<any> {
 	// 	return new Promise((resolve, reject) => {
@@ -224,9 +323,9 @@ export class ChatCodesSocketIOServer {
 
 	}
 	private setupShareDB() {
+		// this.db = new ShareDBMingo();
 		this.db = ShareDBMongo(this.shareDBURL);
-		// this.sharedb = new ShareDB({ db: this.db });
-		this.sharedb = new ShareDB({});
+		this.sharedb = new ShareDB({ db: this.db });
 
 		this.wss.on('connection', (ws, req) => {
 			const stream = new WebSocketJSONStream(ws);
@@ -234,7 +333,7 @@ export class ChatCodesSocketIOServer {
 		});
 
 		this.server.listen(this.shareDBPort);
-		console.log(`Created ShareDB server on port ${this.shareDBPort}`)
+		Logger.info(`Created ShareDB server on port ${this.shareDBPort}`)
 	}
 	private setupSocketIO() {
 		this.io = sio(this.socketIOPort);
@@ -248,15 +347,15 @@ export class ChatCodesSocketIOServer {
 				channelServer.ready().then(() => {
 					callback();
 				});
-				console.log(`Client (${id}) requested to join ${roomName}`);
+				Logger.info(`Client (${id}) requested to join ${roomName}`);
 			});
 			socket.on('channel-available', (roomName:string, callback) => {
 				this.getMembers(roomName).then((members) => {
 					const nobodyThere:boolean = members.length === 0;
 					callback(nobodyThere);
-					console.log(`Telling (${id}) that ${roomName} is${nobodyThere?" ":" not "}available`);
+					Logger.info(`Telling (${id}) that ${roomName} is${nobodyThere?" ":" not "}available`);
 				});
-				console.log(`Client (${id}) asked if ${roomName} is available`);
+				Logger.info(`Client (${id}) asked if ${roomName} is available`);
 			});
 			socket.on('ping', function(data, callback) {
 				callback('pong', {
@@ -267,10 +366,10 @@ export class ChatCodesSocketIOServer {
 			// socket.on('disconnect', () => {
 				// this.clusterIfEmptyForAWhile();
 			// });
-			console.log(`Client connected (id: ${id})`)
+			Logger.info(`Client connected (id: ${id})`)
 		});
 
-		console.log(`Created Socket.IO server on port ${this.socketIOPort}`);
+		Logger.info(`Created Socket.IO server on port ${this.socketIOPort}`);
 	}
 	// private getNamespace(name:string): SocketIO.Namespace {
 	// 	if(!_.has(this.namespaces, name)) {
@@ -620,4 +719,4 @@ const optionDefinitions = [
 const options = commandLineArgs(optionDefinitions);
 
 // const server = new ChatCodesSocketIOServer(options.port, options.dburl);
-const server = new ChatCodesSocketIOServer(options.sharedbport, options.sioport, options.mongodb);
+export default new ChatCodesSocketIOServer(options.sharedbport, options.sioport, options.mongodb);
