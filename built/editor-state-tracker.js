@@ -565,31 +565,92 @@ class EditorStateTracker extends events_1.EventEmitter {
                             this.onEditorOpened(li, true);
                         }
                     }
-                    if (p.length === 3) {
-                        const editorID = editorDoc.data[p[0]]['id'];
-                        const editor = this.getEditorState(editorID);
-                        const isUserCursor = p[1] === 'userCursors';
-                        const isUserSelection = p[1] === 'userSelections';
-                        if (isUserCursor || isUserSelection) {
-                            const remoteCursors = editor.getRemoteCursors();
+                });
+            });
+        });
+        this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
+            _.each(cursorsDoc.data, (cursorInfo, editorID) => {
+                const editor = this.getEditorState(editorID);
+                const remoteCursors = editor.getRemoteCursors();
+                _.each(cursorInfo['userCursors'], (cursorInfo, userID) => {
+                    const { newBufferPosition } = cursorInfo;
+                    const user = this.userList.getUser(userID);
+                    if (user) {
+                        remoteCursors.updateCursor(user.getID(), user, newBufferPosition);
+                    }
+                });
+                _.each(cursorInfo['userSelections'], (selectionInfo, userID) => {
+                    const { newRange } = selectionInfo;
+                    const user = this.userList.getUser(userID);
+                    if (user) {
+                        remoteCursors.updateSelection(user.getID(), user, newRange);
+                    }
+                });
+            });
+            cursorsDoc.on('op', (ops) => {
+                ops.forEach((op) => {
+                    const { p, oi, od } = op;
+                    const editorID = p[0];
+                    const editor = this.getEditorState(editorID);
+                    if (editor) {
+                        const remoteCursors = editor.getRemoteCursors();
+                        if (p.length === 3) {
+                            const isUserCursor = p[1] === 'userCursors';
+                            const isUserSelection = p[1] === 'userSelections';
                             const userID = p[2];
                             const user = this.userList.getUser(userID);
-                            const { oi, od } = op;
                             if (oi) {
                                 if (isUserCursor) {
-                                    remoteCursors.updateCursor(user.getID(), user, oi.newBufferPosition);
+                                    remoteCursors.updateCursor(user.getID(), user, oi['newBufferPosition']);
                                 }
                                 else if (isUserSelection) {
-                                    remoteCursors.updateSelection(user.getID(), user, oi.newRange);
+                                    remoteCursors.updateSelection(user.getID(), user, oi['newRange']);
                                 }
                             }
                             else if (od) {
                                 remoteCursors.removeUserCursors(user);
                             }
                         }
+                        else if (p.length === 1) {
+                            _.each(cursorsDoc.data[editorID]['userCursors'], (cursorInfo, userID) => {
+                                const { newBufferPosition } = cursorInfo;
+                                const user = this.userList.getUser(userID);
+                                remoteCursors.updateCursor(user.getID(), user, newBufferPosition);
+                            });
+                            _.each(cursorsDoc.data[editorID]['userSelections'], (selectionInfo, userID) => {
+                                const { newRange } = selectionInfo;
+                                const user = this.userList.getUser(userID);
+                                remoteCursors.updateSelection(user.getID(), user, newRange);
+                            });
+                        }
+                    }
+                    else {
+                        console.error(`Could not find editor ${editorID}`);
                     }
                 });
             });
+            // if(p.length === 3) {
+            // 	const editorID = editorDoc.data[p[0]]['id'];
+            // 	const editor = this.getEditorState(editorID);
+            // 	const isUserCursor:boolean = p[1] === 'userCursors';
+            // 	const isUserSelection:boolean = p[1] === 'userSelections';
+            //
+            // 	if(isUserCursor || isUserSelection) {
+            // 		const remoteCursors = editor.getRemoteCursors();
+            // 		const userID:string = p[2];
+            // 		const user = this.userList.getUser(userID);
+            // 		const {oi, od} = op;
+            // 		if(oi) {
+            // 			if(isUserCursor) {
+            // 				remoteCursors.updateCursor(user.getID(), user, oi.newBufferPosition);
+            // 			} else if(isUserSelection) {
+            // 				remoteCursors.updateSelection(user.getID(), user, oi.newRange);
+            // 			}
+            // 		} else if(od) {
+            // 			remoteCursors.removeUserCursors(user);
+            // 		}
+            // 	}
+            // }
         });
     }
     createEditor(id, title, contents, grammarName, modified) {

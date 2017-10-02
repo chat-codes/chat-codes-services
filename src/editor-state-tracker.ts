@@ -576,31 +576,86 @@ export class EditorStateTracker extends EventEmitter {
 							this.onEditorOpened(li, true);
 						}
 					}
+				});
+			});
+		});
+		this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
+			_.each(cursorsDoc.data, (cursorInfo:any, editorID:string) => {
+				const editor = this.getEditorState(editorID);
+				const remoteCursors = editor.getRemoteCursors();
+				_.each(cursorInfo['userCursors'], (cursorInfo:any, userID:string) => {
+					const {newBufferPosition} = cursorInfo;
+					const user = this.userList.getUser(userID);
+					if(user) { remoteCursors.updateCursor(user.getID(), user, newBufferPosition); }
+				});
+				_.each(cursorInfo['userSelections'], (selectionInfo:any, userID:string) => {
+					const {newRange} = selectionInfo;
+					const user = this.userList.getUser(userID);
+					if(user) { remoteCursors.updateSelection(user.getID(), user, newRange); }
+				});
+			});
 
-					if(p.length === 3) {
-						const editorID = editorDoc.data[p[0]]['id'];
-						const editor = this.getEditorState(editorID);
-						const isUserCursor:boolean = p[1] === 'userCursors';
-						const isUserSelection:boolean = p[1] === 'userSelections';
+			cursorsDoc.on('op', (ops) => {
+				ops.forEach((op) => {
+					const {p, oi, od} = op;
+					const editorID = p[0];
+					const editor = this.getEditorState(editorID);
 
-						if(isUserCursor || isUserSelection) {
-							const remoteCursors = editor.getRemoteCursors();
+					if(editor) {
+						const remoteCursors = editor.getRemoteCursors();
+						if(p.length === 3) {
+							const isUserCursor:boolean = p[1] === 'userCursors';
+							const isUserSelection:boolean = p[1] === 'userSelections';
 							const userID:string = p[2];
 							const user = this.userList.getUser(userID);
-							const {oi, od} = op;
 							if(oi) {
 								if(isUserCursor) {
-									remoteCursors.updateCursor(user.getID(), user, oi.newBufferPosition);
+									remoteCursors.updateCursor(user.getID(), user, oi['newBufferPosition']);
 								} else if(isUserSelection) {
-									remoteCursors.updateSelection(user.getID(), user, oi.newRange);
+									remoteCursors.updateSelection(user.getID(), user, oi['newRange']);
 								}
 							} else if(od) {
 								remoteCursors.removeUserCursors(user);
 							}
+						} else if(p.length === 1) {
+							_.each(cursorsDoc.data[editorID]['userCursors'], (cursorInfo:any, userID:string) => {
+								const {newBufferPosition} = cursorInfo;
+								const user = this.userList.getUser(userID);
+								remoteCursors.updateCursor(user.getID(), user, newBufferPosition);
+							});
+							_.each(cursorsDoc.data[editorID]['userSelections'], (selectionInfo:any, userID:string) => {
+								const {newRange} = selectionInfo;
+								const user = this.userList.getUser(userID);
+								remoteCursors.updateSelection(user.getID(), user, newRange);
+							});
 						}
+					} else {
+						console.error(`Could not find editor ${editorID}`)
 					}
 				});
 			});
+			// if(p.length === 3) {
+			// 	const editorID = editorDoc.data[p[0]]['id'];
+			// 	const editor = this.getEditorState(editorID);
+			// 	const isUserCursor:boolean = p[1] === 'userCursors';
+			// 	const isUserSelection:boolean = p[1] === 'userSelections';
+			//
+			// 	if(isUserCursor || isUserSelection) {
+			// 		const remoteCursors = editor.getRemoteCursors();
+			// 		const userID:string = p[2];
+			// 		const user = this.userList.getUser(userID);
+			// 		const {oi, od} = op;
+			// 		if(oi) {
+			// 			if(isUserCursor) {
+			// 				remoteCursors.updateCursor(user.getID(), user, oi.newBufferPosition);
+			// 			} else if(isUserSelection) {
+			// 				remoteCursors.updateSelection(user.getID(), user, oi.newRange);
+			// 			}
+			// 		} else if(od) {
+			// 			remoteCursors.removeUserCursors(user);
+			// 		}
+			// 	}
+			// }
 		});
 	}
 
@@ -656,7 +711,7 @@ export class EditorStateTracker extends EventEmitter {
 	public hasDeltaAfter(timestamp:number):boolean {
 		return _.any(this.getAllEditors(), (e) => e.hasDeltaAfter(timestamp));
 	};
-	public addHighlight(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):number {
+	public addHighlight(editorID:string, range:SerializedRange, timestamp:number, extraInfo={}):number {
 		this.setCurrentTimestamp(timestamp, extraInfo);
 
 		const editorState:EditorState = this.getEditorState(editorID);
@@ -666,7 +721,7 @@ export class EditorStateTracker extends EventEmitter {
 			return -1;
 		}
 	}
-	public removeHighlight(editorID:number, highlightID:number, extraInfo={}):boolean {
+	public removeHighlight(editorID:string, highlightID:number, extraInfo={}):boolean {
 		const editorState:EditorState = this.getEditorState(editorID);
 		if(editorState) {
 			return editorState.removeHighlight(highlightID, extraInfo);
@@ -674,7 +729,7 @@ export class EditorStateTracker extends EventEmitter {
 			return false;
 		}
 	}
-	public focus(editorID:number, range:SerializedRange, timestamp:number, extraInfo={}):boolean {
+	public focus(editorID:string, range:SerializedRange, timestamp:number, extraInfo={}):boolean {
 		this.setCurrentTimestamp(timestamp, extraInfo);
 
 		const editorState:EditorState = this.getEditorState(editorID);

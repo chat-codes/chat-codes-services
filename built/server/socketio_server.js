@@ -36,6 +36,7 @@ class ChatCodesChannelServer {
         this.members = new Set();
         this.chatPromise = this.getShareDBChat();
         this.editorsPromise = this.getShareDBEditors();
+        this.cursorsPromise = this.getShareDBCursors();
         this.colorIndex = 0;
         this.ns = this.io.of(`/${channelName}`);
         this.initialize();
@@ -107,13 +108,13 @@ class ChatCodesChannelServer {
                     member.left = this.getTimestamp();
                     return this.submitOp(chatDoc, [{ p: ['activeUsers', id], od: member }]);
                 }).then(() => {
-                    return this.fetchDocFromPromise(this.editorsPromise);
-                }).then((editorsDoc) => {
-                    const removeCursorsPromises = _.chain(editorsDoc.data)
+                    return this.fetchDocFromPromise(this.cursorsPromise);
+                }).then((cursorsDoc) => {
+                    const removeCursorsPromises = _.chain(cursorsDoc.data)
                         .map((ed, i) => {
                         const ucd = ed['userCursors'][id];
                         const usd = ed['userSelections'][id];
-                        return Promise.all([this.submitOp(editorsDoc, [{ p: [i, 'userCursors', id], od: ucd }]), this.submitOp(editorsDoc, [{ p: [i, 'userSelections', id], od: ucd }])]);
+                        return Promise.all([this.submitOp(cursorsDoc, [{ p: [i, 'userCursors', id], od: ucd }]), this.submitOp(cursorsDoc, [{ p: [i, 'userSelections', id], od: ucd }])]);
                     })
                         .flatten(true)
                         .value();
@@ -154,59 +155,30 @@ class ChatCodesChannelServer {
     }
     getChannelName() { return this.channelName; }
     ;
-    getShareDBChat() {
+    getShareDBObject(docName, type, defaultContents) {
         return new Promise((resolve, reject) => {
             const connection = this.sharedb.connect();
-            const doc = connection.get(this.getChannelName(), 'chat');
-            const contents = {
-                'activeUsers': {},
-                'allUsers': {},
-                'messages': [],
-            };
+            const doc = connection.get(this.getChannelName(), docName);
             doc.fetch((err) => {
                 if (err) {
                     reject(err);
                 }
                 else if (doc.type === null) {
-                    doc.create(contents, 'json0', () => {
-                        console.log(`Created chat for channel ${this.getChannelName()}`);
+                    doc.create(defaultContents, type, () => {
                         resolve(doc);
                     });
                 }
                 else {
-                    console.log(`Fetched chat for channel ${this.getChannelName()}`);
                     resolve(doc);
                 }
             });
-        }).then((doc) => {
-            return doc;
         });
     }
+    getShareDBChat() { return this.getShareDBObject('chat', 'json0', { 'activeUsers': {}, 'allUsers': {}, 'messages': [], }); }
     ;
-    getShareDBEditors() {
-        return new Promise((resolve, reject) => {
-            const connection = this.sharedb.connect();
-            // connection.debug = true;
-            const doc = connection.get(this.getChannelName(), 'editors');
-            const contents = [];
-            doc.fetch((err) => {
-                if (err) {
-                    reject(err);
-                }
-                else if (doc.type === null) {
-                    doc.create(contents, 'json0', () => {
-                        resolve(doc);
-                    });
-                }
-                else {
-                    resolve(doc);
-                }
-            });
-        }).then((doc) => {
-            console.log(`Created editors for channel ${this.getChannelName()}`);
-            return doc;
-        });
-    }
+    getShareDBEditors() { return this.getShareDBObject('editors', 'json0', []); }
+    ;
+    getShareDBCursors() { return this.getShareDBObject('cursors', 'json0', {}); }
     ;
 }
 ChatCodesChannelServer.NUM_COLORS = 4;
@@ -297,15 +269,13 @@ class ChatCodesSocketIOServer {
     // 	}
     // 	return this.namespaces[name];
     // };
-    shouldLogData(eventType, data) {
-        if (eventType === 'typing' || eventType === 'cursor-event') {
-            return false;
-        }
-        else {
-            return true;
-        }
-    }
-    ;
+    // private shouldLogData(eventType:string, data:any):boolean {
+    // 	if(eventType === 'typing' || eventType === 'cursor-event') {
+    // 		return false;
+    // 	}  else {
+    // 		return true;
+    // 	}
+    // };
     createNamespace(channelName) {
         if (!this.channels.has(channelName)) {
             const channelServer = new ChatCodesChannelServer(this.sharedb, this.wss, channelName, this.io);
@@ -484,10 +454,11 @@ class ChatCodesSocketIOServer {
 }
 exports.ChatCodesSocketIOServer = ChatCodesSocketIOServer;
 const optionDefinitions = [
-    { name: 'sioport', alias: 'p', type: Number, defaultOption: true, defaultValue: process.env['PORT'] || 3000 },
-    { name: 'siodburl', alias: 'd', type: String, defaultValue: process.env['DATABASE_URL'] || false }
+    { name: 'mongodb', alias: 'm', type: String, defaultValue: 'mongodb://localhost:27017/test' },
+    { name: 'sharedbport', alias: 'd', type: Number, defaultValue: 8000 },
+    { name: 'sioport', alias: 'p', type: Number, defaultValue: 8001 }
 ];
 const options = commandLineArgs(optionDefinitions);
 // const server = new ChatCodesSocketIOServer(options.port, options.dburl);
-const server = new ChatCodesSocketIOServer(8000, 8001, 'mongodb://localhost:27017/test');
+const server = new ChatCodesSocketIOServer(options.sharedbport, options.sioport, options.mongodb);
 //# sourceMappingURL=socketio_server.js.map

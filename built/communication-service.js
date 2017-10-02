@@ -74,10 +74,10 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         this.commService = commService;
         this.channelName = channelName;
         this._isRoot = false;
-        this.editorDocs = new Map();
         this.commLayer = commService.commLayer;
         this.chatDoc = this.createDocSubscription('chat');
         this.editorsDoc = this.createDocSubscription('editors');
+        this.cursorsDoc = this.createDocSubscription('cursors');
         this.userList = new chat_user_1.ChatUserList(this.getMyID(), this);
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new chat_messages_1.MessageGroups(this, this.userList, this.editorStateTracker);
@@ -157,25 +157,12 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         return this.commLayer.createEditorDoc(this.getChannelName(), id, contents);
     }
     ;
-    getShareDBEditor(id) {
-        if (this.editorDocs.has(id)) {
-            return this.editorDocs.get(id);
-        }
-        else {
-            const editorDocPromise = this.createDocSubscription(id);
-            this.editorDocs.set(id, editorDocPromise);
-            return editorDocPromise;
-        }
-    }
     getMyID() {
         return this.commLayer.getMyID(this.getChannelName());
     }
-    getShareDBChat() {
-        return this.chatDoc;
-    }
-    getShareDBEditors() {
-        return this.editorsDoc;
-    }
+    getShareDBChat() { return this.chatDoc; }
+    getShareDBEditors() { return this.editorsDoc; }
+    getShareDBCursors() { return this.cursorsDoc; }
     isRoot() {
         return this._isRoot;
         // return this.commService.isRoot;
@@ -272,18 +259,28 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=true Whether this was from a remote user
      */
     onCursorPositionChanged(delta) {
-        Promise.all([this.getMyID(), this.getShareDBEditors()]).then((info) => {
+        Promise.all([this.getMyID(), this.getShareDBCursors()]).then((info) => {
             const myID = info[0];
             const doc = info[1];
-            for (let i = 0; i < doc.data.length; i++) {
-                let editorState = doc.data[i];
-                if (editorState.id === delta.editorID) {
-                    const oldDelta = editorState.userCursors[myID];
-                    // const {newBufferPosition} = delta;
-                    doc.submitOp({ p: [i, 'userCursors', myID], od: oldDelta, oi: delta });
-                    break;
-                }
+            const { editorID } = delta;
+            if (_.has(doc.data, editorID)) {
+                doc.submitOp({ p: [editorID, 'userCursors', myID], oi: delta, od: doc.data[editorID]['userCursors'][myID] });
             }
+            else {
+                const oi = { 'userCursors': {}, 'userSelections': {} };
+                oi['userCursors'][myID] = delta;
+                doc.submitOp({ p: [editorID], oi });
+            }
+            // for(let i = 0; i<doc.data.length; i++) {
+            //     let editorState = doc.data[i];
+            //     if(editorState.id === delta.editorID) {
+            //         const oldDelta = editorState.userCursors[myID];
+            //         // const {newBufferPosition} = delta;
+            //
+            //         doc.submitOp({p:[i, 'userCursors', myID], od: oldDelta, oi: delta});
+            //         break;
+            //     }
+            // }
             // const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
             // doc.submitOp([{p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status}]);
         });
@@ -299,16 +296,17 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=true Whether this was from a remote user
      */
     onCursorSelectionChanged(delta) {
-        Promise.all([this.getMyID(), this.getShareDBEditors()]).then((info) => {
+        Promise.all([this.getMyID(), this.getShareDBCursors()]).then((info) => {
             const myID = info[0];
             const doc = info[1];
-            for (let i = 0; i < doc.data.length; i++) {
-                let editorState = doc.data[i];
-                if (editorState.id === delta.editorID) {
-                    const oldDelta = editorState.userSelections[myID];
-                    doc.submitOp({ p: [i, 'userSelections', myID], od: oldDelta, oi: delta });
-                    break;
-                }
+            const { editorID } = delta;
+            if (_.has(doc.data, editorID)) {
+                doc.submitOp({ p: [editorID, 'userSelections', myID], oi: delta, od: doc.data[editorID]['userSelections'][myID] });
+            }
+            else {
+                const oi = { 'userCursors': {}, 'userSelections': {} };
+                oi['userSelections'][myID] = delta;
+                doc.submitOp({ p: [editorID], oi });
             }
         });
         // const uid = this.getMyID();
