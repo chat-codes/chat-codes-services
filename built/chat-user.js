@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const events_1 = require("events");
 /*
@@ -57,6 +58,7 @@ class ChatUser extends events_1.EventEmitter {
             id: this.id,
             name: this.name,
             typingStatus: this.typingStatus
+            // active: this.active
         };
     }
 }
@@ -127,6 +129,7 @@ class ChatUserList extends events_1.EventEmitter {
                         }
                     }
                     else {
+                        // console.log(p);
                     }
                 });
             });

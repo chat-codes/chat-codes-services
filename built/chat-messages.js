@@ -1,4 +1,5 @@
 "use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
@@ -51,6 +52,23 @@ class ConnectionMessage {
     isDisconnect() { return this.action !== ConnectionAction.connect; }
 }
 exports.ConnectionMessage = ConnectionMessage;
+class EditMessage {
+    constructor(users, editors, timestamp, contents) {
+        this.users = users;
+        this.editors = editors;
+        this.timestamp = timestamp;
+        this.contents = contents;
+    }
+    getUsers() { return this.users; }
+    ;
+    getEditors() { return this.editors; }
+    ;
+    getTimestamp() { return this.timestamp; }
+    ;
+    getConents() { return this.contents; }
+    ;
+}
+exports.EditMessage = EditMessage;
 class TextMessage {
     constructor(sender, timestamp, message, editorStateTracker) {
         this.sender = sender;
@@ -231,42 +249,12 @@ class EditGroup extends Group {
         return diffs;
     }
     ;
-    getTextBefore() {
-        const editorStates = [];
-        const rv = [];
-        this.getItems().forEach((d) => {
-            const editorState = d.getEditorState();
-            if (_.indexOf(editorStates, editorState) < 0) {
-                editorStates.push(editorState);
-                rv.push({
-                    editorState: editorState,
-                    value: editorState.getTextBeforeDelta(d, true)
-                });
-            }
-        });
-        return rv;
-    }
-    getTextAfter() {
-        const editorStates = [];
-        const rv = [];
-        reverseArr(this.getItems()).forEach((d) => {
-            const editorState = d.getEditorState();
-            if (_.indexOf(editorStates, editorState) < 0) {
-                editorStates.push(editorState);
-                rv.push({
-                    editorState: editorState,
-                    value: editorState.getTextAfterDelta(d, true)
-                });
-            }
-        });
-        return rv;
-    }
     getEditorStates() {
-        const editorStates = this.getItems().map(delta => delta.getEditorState());
+        const editorStates = _.flatten(this.getItems().map(delta => delta.getEditors()));
         return _.unique(editorStates);
     }
     getAuthors() {
-        const authors = this.getItems().map(delta => delta.getAuthor());
+        const authors = _.flatten(this.getItems().map(delta => delta.getUsers()));
         return _.unique(authors);
     }
     compatibleWith(item) {
@@ -361,6 +349,11 @@ class MessageGroups extends events_1.EventEmitter {
         else if (type === 'left') {
             const user = this.chatUserList.getUser(li.uid);
             this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect));
+        }
+        else if (type === 'edit') {
+            const users = li.users.map((uid) => this.chatUserList.getUser(uid));
+            const editors = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
+            this.addItem(new EditMessage(users, editors, li.endTimestamp));
         }
     }
     addDelta(delta) {

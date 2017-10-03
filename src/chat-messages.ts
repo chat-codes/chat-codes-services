@@ -64,6 +64,14 @@ export class ConnectionMessage implements Timestamped {
 	public isDisconnect():boolean { return this.action !== ConnectionAction.connect; }
 }
 
+export class EditMessage implements Timestamped {
+	constructor(private users:Array<ChatUser>, private editors:Array<EditorState>, private timestamp:number, private contents:Map<string, any>) { }
+	public getUsers():Array<ChatUser> { return this.users; };
+	public getEditors():Array<EditorState> { return this.editors; };
+	public getTimestamp():number { return this.timestamp; };
+	public getConents():Map<string, any> { return this.contents; };
+}
+
 export class TextMessage implements Timestamped {
 	constructor(private sender:ChatUser, private timestamp:number, private message:string, editorStateTracker:EditorStateTracker) {
 		const htmlBuilder = document.createElement('li');
@@ -192,7 +200,7 @@ class Group<T extends Timestamped> extends EventEmitter implements MessageGroup<
 	};
 }
 
-export class EditGroup extends Group<UndoableDelta> {
+export class EditGroup extends Group<EditMessage> {
 	public getDiffSummary():Array<any> {
 		const textBefore = this.getTextBefore();
 		const textAfter = this.getTextAfter();
@@ -222,43 +230,12 @@ export class EditGroup extends Group<UndoableDelta> {
 		return diffs;
 	};
 
-	private getTextBefore():Array<any> {
-		const editorStates = [];
-		const rv = [];
-		this.getItems().forEach((d:UndoableDelta) => {
-			const editorState = d.getEditorState();
-			if(_.indexOf(editorStates, editorState)<0) {
-				editorStates.push(editorState);
-				rv.push({
-					editorState: editorState,
-					value: editorState.getTextBeforeDelta(d, true)
-				});
-			}
-		});
-		return rv;
-	}
-	private getTextAfter():Array<any> {
-		const editorStates = [];
-		const rv = [];
-		reverseArr(this.getItems()).forEach((d:UndoableDelta) => {
-			const editorState = d.getEditorState();
-			if(_.indexOf(editorStates, editorState)<0) {
-				editorStates.push(editorState);
-				rv.push({
-					editorState: editorState,
-					value: editorState.getTextAfterDelta(d, true)
-				});
-			}
-		});
-		return rv;
-	}
-
 	public getEditorStates():Array<EditorState> {
-		const editorStates = this.getItems().map(delta => delta.getEditorState() );
+		const editorStates = _.flatten(this.getItems().map(delta => delta.getEditors() ));
 		return _.unique(editorStates);
 	}
 	public getAuthors():Array<ChatUser> {
-		const authors = this.getItems().map(delta => delta.getAuthor() )
+		const authors = _.flatten(this.getItems().map(delta => delta.getUsers() ));
 		return _.unique(authors);
 	}
 	public compatibleWith(item:any):boolean {
@@ -339,6 +316,11 @@ export class MessageGroups extends EventEmitter {
 		} else if(type === 'left') {
 			const user = this.chatUserList.getUser(li.uid);
 			this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect));
+		} else if(type === 'edit') {
+			const users:Array<ChatUser> = li.users.map((uid) => this.chatUserList.getUser(uid));
+			const editors:Array<EditorState> = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
+
+			this.addItem(new EditMessage(users, editors, li.endTimestamp));
 		}
 	}
 	public addDelta(delta:UndoableDelta) {
@@ -353,7 +335,7 @@ export class MessageGroups extends EventEmitter {
 				(group instanceof ConnectionMessageGroup && item instanceof ConnectionMessage);
 	}
 
-	private addItem(item:UndoableDelta|TextMessage|ConnectionMessage) {
+	private addItem(item:EditMessage|TextMessage|ConnectionMessage) {
 		const itemTimestamp = item.getTimestamp();
 		let insertedIntoExistingGroup:boolean = false;
 		let i = this.messageGroups.length-1
@@ -393,7 +375,7 @@ export class MessageGroups extends EventEmitter {
 
 		if(!insertedIntoExistingGroup) {
 			const insertionIndex = i+1;
-			let group:Group<UndoableDelta|TextMessage|ConnectionMessage>;
+			let group:Group<EditMessage|TextMessage|ConnectionMessage>;
 			if(item instanceof TextMessage) {
 				group = new TextMessageGroup([item]);
 			} else if(item instanceof ConnectionMessage){
