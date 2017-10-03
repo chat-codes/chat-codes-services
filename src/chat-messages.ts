@@ -1,6 +1,6 @@
 import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
-import { EditorStateTracker, UndoableDelta, EditDelta, EditorState } from './editor-state-tracker';
+import { EditorStateTracker, EditorState } from './editor-state-tracker';
 import { ChannelCommunicationService } from './communication-service';
 import { EventEmitter } from 'events';
 import * as showdown from 'showdown';
@@ -65,11 +65,11 @@ export class ConnectionMessage implements Timestamped {
 }
 
 export class EditMessage implements Timestamped {
-	constructor(private users:Array<ChatUser>, private editors:Array<EditorState>, private timestamp:number, private contents:Map<string, any>) { }
+	constructor(private users:Array<ChatUser>, private editors:Array<EditorState>, private timestamp:number, private contents) { }
 	public getUsers():Array<ChatUser> { return this.users; };
 	public getEditors():Array<EditorState> { return this.editors; };
 	public getTimestamp():number { return this.timestamp; };
-	public getConents():Map<string, any> { return this.contents; };
+	public getContents() { return this.contents; };
 }
 
 export class TextMessage implements Timestamped {
@@ -202,32 +202,63 @@ class Group<T extends Timestamped> extends EventEmitter implements MessageGroup<
 
 export class EditGroup extends Group<EditMessage> {
 	public getDiffSummary():Array<any> {
-		const textBefore = this.getTextBefore();
-		const textAfter = this.getTextAfter();
+		const contentMap:Map<string, any> = new Map();
+		this.getItems().forEach((em:EditMessage) => {
+			const contents = em.getContents();
+			_.each(contents, (info, editorID:string) => {
+				contentMap.set(editorID, info);
+			})
+		});
+		const editors = this.getEditorStates();
+		const editorMap:Map<string, EditorState> = new Map<string, EditorState>();
+		editors.forEach((ed:EditorState) => {
+			editorMap.set(ed.getEditorID(), ed);
+		});
 		const diffs = [];
-		for(let i = 0; i<textBefore.length; i++) {
-			let tbEditorState:EditorState = textBefore[i].editorState;
-			for(let j = 0; j<textAfter.length; j++) {
-				let taEditorState:EditorState = textAfter[j].editorState;
-				if(taEditorState === tbEditorState) {
-					const editorState:EditorState = taEditorState;
-					const valueBefore = textBefore[i].value;
-					const valueAfter = textAfter[j].value;
-					let diff = difflib.unifiedDiff(valueBefore, valueAfter, {fromfile:editorState.getTitle(), tofile:editorState.getTitle()});
-					if(diff.length > 0) { diff[0]=diff[0].trim(); }
-					if(diff.length > 1) { diff[1]=diff[1].trim(); }
-					diff = diff.join('\n');
-					diffs.push({
-						editorState: editorState,
-						valueBefore: valueBefore,
-						valueAfter: valueBefore,
-						diff: diff
-					});
-					break;
-				}
-			}
-		}
+		contentMap.forEach((info, editorID) => {
+			const editorState = editorMap.get(editorID);
+			const editorTitle = editorState.getTitle();
+			const {valueBefore, valueAfter} = info;
+
+			let diff = difflib.unifiedDiff(valueBefore.split('\n'), valueAfter.split('\n'), {fromfile:editorTitle, tofile:editorTitle});
+			if(diff.length > 0) { diff[0]=diff[0].trim(); }
+			if(diff.length > 1) { diff[1]=diff[1].trim(); }
+			diff = diff.join('\n');
+			diffs.push({
+				editorState: editorState,
+				valueBefore: valueBefore,
+				valueAfter: valueAfter,
+				diff: diff
+			});
+		});
 		return diffs;
+		// const diffs =  _.map()
+		// const textBefore = this.getTextBefore();
+		// const textAfter = this.getTextAfter();
+		// const diffs = [];
+		// for(let i = 0; i<textBefore.length; i++) {
+		// 	let tbEditorState:EditorState = textBefore[i].editorState;
+		// 	for(let j = 0; j<textAfter.length; j++) {
+		// 		let taEditorState:EditorState = textAfter[j].editorState;
+		// 		if(taEditorState === tbEditorState) {
+		// 			const editorState:EditorState = taEditorState;
+		// 			const valueBefore = textBefore[i].value;
+		// 			const valueAfter = textAfter[j].value;
+		// 			let diff = difflib.unifiedDiff(valueBefore, valueAfter, {fromfile:editorState.getTitle(), tofile:editorState.getTitle()});
+		// 			if(diff.length > 0) { diff[0]=diff[0].trim(); }
+		// 			if(diff.length > 1) { diff[1]=diff[1].trim(); }
+		// 			diff = diff.join('\n');
+		// 			diffs.push({
+		// 				editorState: editorState,
+		// 				valueBefore: valueBefore,
+		// 				valueAfter: valueBefore,
+		// 				diff: diff
+		// 			});
+		// 			break;
+		// 		}
+		// 	}
+		// }
+		// return diffs;
 	};
 
 	public getEditorStates():Array<EditorState> {
@@ -239,7 +270,7 @@ export class EditGroup extends Group<EditMessage> {
 		return _.unique(authors);
 	}
 	public compatibleWith(item:any):boolean {
-		return item instanceof EditDelta;
+		return item instanceof EditMessage;
 	};
 	protected constructNew(items):EditGroup {
 		return new EditGroup(items);
@@ -280,7 +311,7 @@ export class ConnectionMessageGroup extends Group<ConnectionMessage> {
 export class MessageGroups extends EventEmitter {
     private chatDocPromise:Promise<ShareDB.Doc>;
 	private messageGroupingTimeThreshold: number = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
-	private messageGroups: Array<Group<TextMessage|UndoableDelta|ConnectionMessage>> = [];
+	private messageGroups: Array<Group<TextMessage|EditMessage|ConnectionMessage>> = [];
 	constructor(private channelService:ChannelCommunicationService, private chatUserList:ChatUserList, public editorStateTracker:EditorStateTracker) {
 		super();
         this.chatDocPromise = this.channelService.getShareDBChat();
@@ -291,11 +322,26 @@ export class MessageGroups extends EventEmitter {
 				});
 	            doc.on('op', (ops, source) => {
 	                ops.forEach((op) => {
-	                    const {p} = op;
+	                    const {p, li, ld} = op;
 	                    const [field] = p;
 						if(field === 'messages') {
-							if(_.has(op, 'li')) {
-								const {li} = op;
+							if(ld) {
+								const messageGroups = this.getMessageGroups();
+								const lastMessageGroup = _.last(messageGroups);
+								if(lastMessageGroup instanceof EditGroup) {
+									const i = messageGroups.length - 1;
+									(this as any).emit('group-will-be-removed', {
+										messageGroup: lastMessageGroup,
+										insertionIndex: i
+									});
+									this.messageGroups.splice(i, 1);
+									(this as any).emit('group-removed', {
+										messageGroup: lastMessageGroup,
+										insertionIndex: i
+									});
+								}
+							}
+							if(li) {
 								this.addFromSerializedMessage(li);
 							}
 						}
@@ -320,17 +366,12 @@ export class MessageGroups extends EventEmitter {
 			const users:Array<ChatUser> = li.users.map((uid) => this.chatUserList.getUser(uid));
 			const editors:Array<EditorState> = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
 
-			this.addItem(new EditMessage(users, editors, li.endTimestamp));
+			this.addItem(new EditMessage(users, editors, li.endTimestamp, li.fileContents));
 		}
 	}
-	public addDelta(delta:UndoableDelta) {
-		if(delta instanceof EditDelta) {
-			this.addItem(delta);
-		}
-	};
 
 	private typeMatches(item:Timestamped, group:Group<Timestamped>):boolean {
-		return (group instanceof EditGroup && item instanceof EditDelta) ||
+		return (group instanceof EditGroup && item instanceof EditMessage) ||
 				(group instanceof TextMessageGroup && item instanceof TextMessage) ||
 				(group instanceof ConnectionMessageGroup && item instanceof ConnectionMessage);
 	}
@@ -386,7 +427,7 @@ export class MessageGroups extends EventEmitter {
 			this.addGroup(group, insertionIndex);
 		}
 	}
-	private addGroup(group:Group<UndoableDelta|TextMessage|ConnectionMessage>, insertionIndex:number) {
+	private addGroup(group:Group<EditMessage|TextMessage|ConnectionMessage>, insertionIndex:number) {
 		(this as any).emit('group-will-be-added', {
 			messageGroup: group,
 			insertionIndex: insertionIndex

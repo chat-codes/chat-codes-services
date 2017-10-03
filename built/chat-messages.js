@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const _ = require("underscore");
-const editor_state_tracker_1 = require("./editor-state-tracker");
 const events_1 = require("events");
 const showdown = require("showdown");
 const difflib = require("difflib");
@@ -65,7 +64,7 @@ class EditMessage {
     ;
     getTimestamp() { return this.timestamp; }
     ;
-    getConents() { return this.contents; }
+    getContents() { return this.contents; }
     ;
 }
 exports.EditMessage = EditMessage;
@@ -217,36 +216,66 @@ class Group extends events_1.EventEmitter {
 }
 class EditGroup extends Group {
     getDiffSummary() {
-        const textBefore = this.getTextBefore();
-        const textAfter = this.getTextAfter();
+        const contentMap = new Map();
+        this.getItems().forEach((em) => {
+            const contents = em.getContents();
+            _.each(contents, (info, editorID) => {
+                contentMap.set(editorID, info);
+            });
+        });
+        const editors = this.getEditorStates();
+        const editorMap = new Map();
+        editors.forEach((ed) => {
+            editorMap.set(ed.getEditorID(), ed);
+        });
         const diffs = [];
-        for (let i = 0; i < textBefore.length; i++) {
-            let tbEditorState = textBefore[i].editorState;
-            for (let j = 0; j < textAfter.length; j++) {
-                let taEditorState = textAfter[j].editorState;
-                if (taEditorState === tbEditorState) {
-                    const editorState = taEditorState;
-                    const valueBefore = textBefore[i].value;
-                    const valueAfter = textAfter[j].value;
-                    let diff = difflib.unifiedDiff(valueBefore, valueAfter, { fromfile: editorState.getTitle(), tofile: editorState.getTitle() });
-                    if (diff.length > 0) {
-                        diff[0] = diff[0].trim();
-                    }
-                    if (diff.length > 1) {
-                        diff[1] = diff[1].trim();
-                    }
-                    diff = diff.join('\n');
-                    diffs.push({
-                        editorState: editorState,
-                        valueBefore: valueBefore,
-                        valueAfter: valueBefore,
-                        diff: diff
-                    });
-                    break;
-                }
+        contentMap.forEach((info, editorID) => {
+            const editorState = editorMap.get(editorID);
+            const editorTitle = editorState.getTitle();
+            const { valueBefore, valueAfter } = info;
+            let diff = difflib.unifiedDiff(valueBefore.split('\n'), valueAfter.split('\n'), { fromfile: editorTitle, tofile: editorTitle });
+            if (diff.length > 0) {
+                diff[0] = diff[0].trim();
             }
-        }
+            if (diff.length > 1) {
+                diff[1] = diff[1].trim();
+            }
+            diff = diff.join('\n');
+            diffs.push({
+                editorState: editorState,
+                valueBefore: valueBefore,
+                valueAfter: valueAfter,
+                diff: diff
+            });
+        });
         return diffs;
+        // const diffs =  _.map()
+        // const textBefore = this.getTextBefore();
+        // const textAfter = this.getTextAfter();
+        // const diffs = [];
+        // for(let i = 0; i<textBefore.length; i++) {
+        // 	let tbEditorState:EditorState = textBefore[i].editorState;
+        // 	for(let j = 0; j<textAfter.length; j++) {
+        // 		let taEditorState:EditorState = textAfter[j].editorState;
+        // 		if(taEditorState === tbEditorState) {
+        // 			const editorState:EditorState = taEditorState;
+        // 			const valueBefore = textBefore[i].value;
+        // 			const valueAfter = textAfter[j].value;
+        // 			let diff = difflib.unifiedDiff(valueBefore, valueAfter, {fromfile:editorState.getTitle(), tofile:editorState.getTitle()});
+        // 			if(diff.length > 0) { diff[0]=diff[0].trim(); }
+        // 			if(diff.length > 1) { diff[1]=diff[1].trim(); }
+        // 			diff = diff.join('\n');
+        // 			diffs.push({
+        // 				editorState: editorState,
+        // 				valueBefore: valueBefore,
+        // 				valueAfter: valueBefore,
+        // 				diff: diff
+        // 			});
+        // 			break;
+        // 		}
+        // 	}
+        // }
+        // return diffs;
     }
     ;
     getEditorStates() {
@@ -258,7 +287,7 @@ class EditGroup extends Group {
         return _.unique(authors);
     }
     compatibleWith(item) {
-        return item instanceof editor_state_tracker_1.EditDelta;
+        return item instanceof EditMessage;
     }
     ;
     constructNew(items) {
@@ -321,11 +350,26 @@ class MessageGroups extends events_1.EventEmitter {
                 });
                 doc.on('op', (ops, source) => {
                     ops.forEach((op) => {
-                        const { p } = op;
+                        const { p, li, ld } = op;
                         const [field] = p;
                         if (field === 'messages') {
-                            if (_.has(op, 'li')) {
-                                const { li } = op;
+                            if (ld) {
+                                const messageGroups = this.getMessageGroups();
+                                const lastMessageGroup = _.last(messageGroups);
+                                if (lastMessageGroup instanceof EditGroup) {
+                                    const i = messageGroups.length - 1;
+                                    this.emit('group-will-be-removed', {
+                                        messageGroup: lastMessageGroup,
+                                        insertionIndex: i
+                                    });
+                                    this.messageGroups.splice(i, 1);
+                                    this.emit('group-removed', {
+                                        messageGroup: lastMessageGroup,
+                                        insertionIndex: i
+                                    });
+                                }
+                            }
+                            if (li) {
                                 this.addFromSerializedMessage(li);
                             }
                         }
@@ -353,17 +397,11 @@ class MessageGroups extends events_1.EventEmitter {
         else if (type === 'edit') {
             const users = li.users.map((uid) => this.chatUserList.getUser(uid));
             const editors = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
-            this.addItem(new EditMessage(users, editors, li.endTimestamp));
+            this.addItem(new EditMessage(users, editors, li.endTimestamp, li.fileContents));
         }
     }
-    addDelta(delta) {
-        if (delta instanceof editor_state_tracker_1.EditDelta) {
-            this.addItem(delta);
-        }
-    }
-    ;
     typeMatches(item, group) {
-        return (group instanceof EditGroup && item instanceof editor_state_tracker_1.EditDelta) ||
+        return (group instanceof EditGroup && item instanceof EditMessage) ||
             (group instanceof TextMessageGroup && item instanceof TextMessage) ||
             (group instanceof ConnectionMessageGroup && item instanceof ConnectionMessage);
     }

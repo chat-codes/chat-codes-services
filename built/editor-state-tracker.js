@@ -553,7 +553,6 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.editorStates = new Map();
         this.currentTimestamp = CURRENT;
         this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-            console.log(editorDoc);
             editorDoc.data.forEach((li) => {
                 this.onEditorOpened(li, true);
             });

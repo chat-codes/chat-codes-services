@@ -328,7 +328,7 @@ export class EditorState {
 	private isOpen:boolean;
 	private deltas: Array<UndoableDelta> = [];
     private selections:{[selectionID:number]:any} = {};
-	private editorID:number;
+	private editorID:string;
 	private remoteCursors:RemoteCursorMarker = new RemoteCursorMarker(this);
 	private title:string;
 	private modified:boolean;
@@ -371,7 +371,7 @@ export class EditorState {
 	public getTitle():string { return this.title; };
 	public getIsOpen():boolean { return this.isOpen; };
 	public getRemoteCursors():RemoteCursorMarker { return this.remoteCursors; };
-	public getEditorID():number { return this.editorID; };
+	public getEditorID():string { return this.editorID; };
 	public getIsModified():boolean { return this.modified; };
 	public addHighlight(range, extraInfo):number {
 		return this.getEditorWrapper().addHighlight(range, extraInfo);
@@ -564,7 +564,6 @@ export class EditorStateTracker extends EventEmitter {
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
 		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
-			console.log(editorDoc);
 			editorDoc.data.forEach((li) => {
 				this.onEditorOpened(li, true);
 			});

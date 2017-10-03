@@ -93,51 +93,50 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             }
         });
         // Track when something happens in the editor
-        this.commLayer.bind(this.channelName, 'editor-event', (data) => {
-            const delta = this.editorStateTracker.handleEvent(data, true);
-            this.messageGroups.addDelta(delta);
-            this.emit('editor-event', data);
-        });
+        // this.commLayer.bind(this.channelName, 'editor-event', (data) => {
+        // 	const delta:UndoableDelta = this.editorStateTracker.handleEvent(data, true);
+        //     this.messageGroups.addDelta(delta);
+        //     (this as any).emit('editor-event', data);
+        // });
         // Track when the user moves the cursor
-        this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
-            const { id, type, uid } = data;
-            let user = this.userList.getUser(uid);
-            const cursorID = uid + id;
-            if (type === 'change-position') {
-                const { newBufferPosition, oldBufferPosition, newRange, cursorID, editorID } = data;
-                const editorState = this.editorStateTracker.getEditorState(editorID);
-                if (editorState) {
-                    const remoteCursors = editorState.getRemoteCursors();
-                    remoteCursors.updateCursor(cursorID, user, { row: newBufferPosition[0], column: newBufferPosition[1] });
-                }
-            }
-            else if (type === 'change-selection') {
-                const { newRange, id, editorID } = data;
-                const editorState = this.editorStateTracker.getEditorState(editorID);
-                if (editorState) {
-                    const remoteCursors = editorState.getRemoteCursors();
-                    remoteCursors.updateSelection(cursorID, user, newRange);
-                }
-            }
-            else if (type === 'destroy') {
-                const { newRange, id, editorID } = data;
-                const editorState = this.editorStateTracker.getEditorState(editorID);
-                if (editorState) {
-                    const remoteCursors = editorState.getRemoteCursors();
-                    remoteCursors.removeCursor(cursorID, user);
-                }
-            }
-            this.emit('cursor-event', data);
-        });
+        // this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
+        // 	const {id, type, uid} = data;
+        // 	let user = this.userList.getUser(uid);
+        //     const cursorID = uid + id;
+        //
+        // 	if(type === 'change-position') { // The caret position changed
+        // 		const {newBufferPosition, oldBufferPosition, newRange, cursorID, editorID} = data;
+        // 		const editorState = this.editorStateTracker.getEditorState(editorID);
+        // 		if(editorState) {
+        // 			const remoteCursors = editorState.getRemoteCursors();
+        // 			remoteCursors.updateCursor(cursorID, user, {row: newBufferPosition[0], column: newBufferPosition[1]});
+        // 		}
+        // 	} else if(type === 'change-selection') { // The selection range changed
+        // 		const {newRange, id, editorID} = data;
+        // 		const editorState = this.editorStateTracker.getEditorState(editorID);
+        // 		if(editorState) {
+        // 			const remoteCursors = editorState.getRemoteCursors();
+        // 			remoteCursors.updateSelection(cursorID, user, newRange);
+        // 		}
+        // 	} else if(type === 'destroy') { // The cursor was destroyed
+        // 		const {newRange, id, editorID} = data;
+        // 		const editorState = this.editorStateTracker.getEditorState(editorID);
+        // 		if(editorState) {
+        // 			const remoteCursors = editorState.getRemoteCursors();
+        // 			remoteCursors.removeCursor(cursorID, user);
+        // 		}
+        // 	}
+        //     (this as any).emit('cursor-event', data);
+        // });
         // A new editor was opened
-        this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
-            // const mustPerformChange = !this.isRoot();
-            const editorState = this.editorStateTracker.onEditorOpened(data, true);
-            _.each(editorState.getDeltas(), (delta) => {
-                this.messageGroups.addDelta(delta);
-            });
-            this.emit('editor-opened', data);
-        });
+        // this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
+        //     // const mustPerformChange = !this.isRoot();
+        // 	const editorState:EditorState = this.editorStateTracker.onEditorOpened(data, true);
+        //     _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
+        //         this.messageGroups.addDelta(delta);
+        //     });
+        //     (this as any).emit('editor-opened', data);
+        // });
     }
     createDocSubscription(docName) {
         return this.commLayer.getShareDBObject(this.getChannelName(), docName).then((doc) => {

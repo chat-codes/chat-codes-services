@@ -69,15 +69,15 @@ export class ChatCodesChannelServer extends EventEmitter {
 				editorsDoc.data.forEach((docInfo) => {
 					const {id} = docInfo;
 					if(editedFiles.has(id)) {
-						editGroup['fileContents'][id]['to'] = docInfo.contents;
+						editGroup['fileContents'][id]['valueAfter'] = docInfo.contents;
 					}
 				});
-				this.submitOp(chatDoc, {p: ['messages', chatDoc.data.messages.length-1], li: editGroup, ld: _.last(chatDoc.data.messages[chatDoc]) });
+				this.submitOp(chatDoc, {p: ['messages', chatDoc.data.messages.length-1], li: editGroup, ld: _.last(chatDoc.data.messages) });
 			}
 
 			this.on('editor-event', (info) => {
 				if(lastEvent !== 'edit') {
-					createNewEditGroup();
+					createNewEditGroup.call(this);
 				}
 
 				const {uid} = info;
@@ -106,23 +106,36 @@ export class ChatCodesChannelServer extends EventEmitter {
 					if(p.length === 3 && p[1] === 'contents') {
 						const editorIndex = p[0];
 						const editorID = editorsDoc.data[editorIndex].id;
+						const editorContents:string = editorsDoc.data[editorIndex].contents;
 
 						if(!editedFiles.has(editorID)) {
 							editedFiles.add(editorID);
 							editGroup['files'].push(editorID);
 							editGroup['fileContents'][editorID] = {
-								from: editorsDoc.data[editorIndex].contents,
-								to: false
+								valueBefore: editorContents,
+								valueAfter: editorContents
 							};
 						}
+					}
+				});
+			});
+			editorsDoc.on('op', (ops) => {
+				ops.forEach((op, source) => {
+					const {p, li} = op;
+					if(p.length === 3 && p[1] === 'contents') {
+						const editorIndex = p[0];
+						const editorID = editorsDoc.data[editorIndex].id;
+						const editorContents:string = editorsDoc.data[editorIndex].contents;
+
+						editGroup['fileContents'][editorID]['valueAfter'] = editorContents;
 
 						if(lastEvent !== 'edit') {
-							createNewEditGroup();
+							createNewEditGroup.call(this);
 							this.submitOp(chatDoc, {p: ['messages', chatDoc.data.messages.length], li: editGroup }, {source: true});
 						} else {
 							editGroup['toVersion'] = editorsDoc.version;
 							editGroup['endTimestamp'] = this.getTimestamp();
-							this.submitOp(chatDoc, {p: ['messages', chatDoc.data.messages.length-1], li: editGroup, ld: _.last(chatDoc.data.messages[chatDoc]) }, {source: true});
+							this.submitOp(chatDoc, {p: ['messages', chatDoc.data.messages.length-1], li: editGroup, ld: _.last(chatDoc.data.messages) }, {source: true});
 						}
 						lastEvent = 'edit';
 					}
@@ -430,8 +443,8 @@ export class ChatCodesSocketIOServer {
 
 	}
 	private setupShareDB() {
-		// this.db = new ShareDBMingo();
-		this.db = ShareDBMongo(this.shareDBURL);
+		this.db = new ShareDBMingo();
+		// this.db = ShareDBMongo(this.shareDBURL);
 		this.sharedb = new ShareDB({ db: this.db });
 
 		this.wss.on('connection', (ws, req) => {
