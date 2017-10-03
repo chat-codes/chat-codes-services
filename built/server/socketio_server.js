@@ -64,15 +64,16 @@ class ChatCodesChannelServer extends events_1.EventEmitter {
                     startTimestamp: this.getTimestamp(),
                     endTimestamp: this.getTimestamp()
                 };
+                this.submitOp(chatDoc, { p: ['messages', chatDoc.data.messages.length], li: editGroup }, { source: true });
             }
             function capCurrentEditGroup() {
-                editorsDoc.data.forEach((docInfo) => {
-                    const { id } = docInfo;
-                    if (editedFiles.has(id)) {
-                        editGroup['fileContents'][id]['valueAfter'] = docInfo.contents;
-                    }
-                });
-                this.submitOp(chatDoc, { p: ['messages', chatDoc.data.messages.length - 1], li: editGroup, ld: _.last(chatDoc.data.messages) });
+                // editorsDoc.data.forEach((docInfo) => {
+                // 	const {id} = docInfo;
+                // 	if(editedFiles.has(id)) {
+                // 		editGroup['fileContents'][id]['valueAfter'] = docInfo.contents;
+                // 	}
+                // });
+                // this.submitOp(chatDoc, {p: ['messages', chatDoc.data.messages.length-1], li: editGroup, ld: _.last(chatDoc.data.messages) });
             }
             this.on('editor-event', (info) => {
                 if (lastEvent !== 'edit') {
@@ -89,7 +90,7 @@ class ChatCodesChannelServer extends events_1.EventEmitter {
                 ops.forEach((op, source) => {
                     const { p, li } = op;
                     if (p.length === 2 && p[0] === 'messages' && li && li.type !== 'edit' && !source) {
-                        if (lastEvent !== 'chat') {
+                        if (lastEvent === 'edit') {
                             capCurrentEditGroup.call(this);
                         }
                         lastEvent = 'chat';
@@ -124,7 +125,6 @@ class ChatCodesChannelServer extends events_1.EventEmitter {
                         editGroup['fileContents'][editorID]['valueAfter'] = editorContents;
                         if (lastEvent !== 'edit') {
                             createNewEditGroup.call(this);
-                            this.submitOp(chatDoc, { p: ['messages', chatDoc.data.messages.length], li: editGroup }, { source: true });
                         }
                         else {
                             editGroup['toVersion'] = editorsDoc.version;
@@ -191,14 +191,12 @@ class ChatCodesChannelServer extends events_1.EventEmitter {
             });
             s.on('data-get-editors-values', (version, callback) => {
                 return this.getEditorValues(version).then((result) => {
-                    console.log(result);
-                    callback(result.values());
+                    callback(Array.from(result.values()));
                 });
             });
             s.on('data-get-editors-diff', (fromVersion, toVersion, callback) => {
                 return this.getEditorDiffs(fromVersion, toVersion).then((result) => {
-                    console.log(result);
-                    callback(result.values());
+                    callback(Array.from(result.values()));
                 });
             });
             s.on('set-username', (username, callback) => {
@@ -315,7 +313,7 @@ class ChatCodesChannelServer extends events_1.EventEmitter {
         let editorValues = new Map();
         const jsonType = ShareDB.types.map['json0'];
         return this.getEditorOps(0, version).then((ops) => {
-            _.each(ops, (op) => {
+            _.each(ops, (op, i) => {
                 if (op['create']) {
                     // content = _.clone(op['data']);
                 }

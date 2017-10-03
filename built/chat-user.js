@@ -45,7 +45,7 @@ class ChatUser extends events_1.EventEmitter {
     setTypingStatus(status) {
         this.typingStatus = status;
         // this.chatDocPromise.then((doc) => {
-        //     const oldValue = doc.dta['activeUsers'][this.getID()]['info']['typingStatus'];
+        //     const oldValue = doc.data['activeUsers'][this.getID()]['info']['typingStatus'];
         //     doc.submitOp([{p: ['activeUsers', this.getID(), 'info', 'typingStatus'], od: oldValue, oi: this.getTypingStatus()}]);
         // });
         // this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {

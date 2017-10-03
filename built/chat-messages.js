@@ -69,10 +69,11 @@ class EditMessage {
 }
 exports.EditMessage = EditMessage;
 class TextMessage {
-    constructor(sender, timestamp, message, editorStateTracker) {
+    constructor(sender, timestamp, message, editorsVersion, editorStateTracker) {
         this.sender = sender;
         this.timestamp = timestamp;
         this.message = message;
+        this.editorsVersion = editorsVersion;
         this.converter = new showdown.Converter({ simplifiedAutoLink: true });
         this.fileLinkRegexp = new RegExp('^(.+):\s*L(\\d+)(\\s*,\\s*(\\d+))?(\s*-\s*L(\\d+)(\\s*,\\s*(\\d+))?)?$');
         const htmlBuilder = document.createElement('li');
@@ -108,6 +109,8 @@ class TextMessage {
     getMessage() { return this.message; }
     ;
     getHTML() { return this.html; }
+    ;
+    getEditorVersion() { return this.editorsVersion; }
     ;
     matchFileLinkAttributes(str) {
         const match = str.match(this.fileLinkRegexp);
@@ -213,6 +216,25 @@ class Group extends events_1.EventEmitter {
         return new Group(items);
     }
     ;
+    clearItems() {
+        for (let i = 0; i < this.items.length; i++) {
+            this.removeItem(i);
+            i--;
+        }
+    }
+    ;
+    removeItem(i) {
+        const item = this.items[i];
+        this.emit('item-will-be-removed', {
+            group: this,
+            item: item
+        });
+        this.items.splice(i, 1);
+        this.emit('item-removed', {
+            group: this,
+            item: item
+        });
+    }
 }
 class EditGroup extends Group {
     getDiffSummary() {
@@ -249,33 +271,6 @@ class EditGroup extends Group {
             });
         });
         return diffs;
-        // const diffs =  _.map()
-        // const textBefore = this.getTextBefore();
-        // const textAfter = this.getTextAfter();
-        // const diffs = [];
-        // for(let i = 0; i<textBefore.length; i++) {
-        // 	let tbEditorState:EditorState = textBefore[i].editorState;
-        // 	for(let j = 0; j<textAfter.length; j++) {
-        // 		let taEditorState:EditorState = textAfter[j].editorState;
-        // 		if(taEditorState === tbEditorState) {
-        // 			const editorState:EditorState = taEditorState;
-        // 			const valueBefore = textBefore[i].value;
-        // 			const valueAfter = textAfter[j].value;
-        // 			let diff = difflib.unifiedDiff(valueBefore, valueAfter, {fromfile:editorState.getTitle(), tofile:editorState.getTitle()});
-        // 			if(diff.length > 0) { diff[0]=diff[0].trim(); }
-        // 			if(diff.length > 1) { diff[1]=diff[1].trim(); }
-        // 			diff = diff.join('\n');
-        // 			diffs.push({
-        // 				editorState: editorState,
-        // 				valueBefore: valueBefore,
-        // 				valueAfter: valueBefore,
-        // 				diff: diff
-        // 			});
-        // 			break;
-        // 		}
-        // 	}
-        // }
-        // return diffs;
     }
     ;
     getEditorStates() {
@@ -308,6 +303,10 @@ class TextMessageGroup extends Group {
     ;
     constructNew(items) {
         return new TextMessageGroup(items);
+    }
+    ;
+    getEditorVersion() {
+        return this.getLatestItem().getEditorVersion();
     }
     ;
 }
@@ -353,23 +352,13 @@ class MessageGroups extends events_1.EventEmitter {
                         const { p, li, ld } = op;
                         const [field] = p;
                         if (field === 'messages') {
-                            if (ld) {
-                                const messageGroups = this.getMessageGroups();
-                                const lastMessageGroup = _.last(messageGroups);
-                                if (lastMessageGroup instanceof EditGroup) {
-                                    const i = messageGroups.length - 1;
-                                    this.emit('group-will-be-removed', {
-                                        messageGroup: lastMessageGroup,
-                                        insertionIndex: i
-                                    });
-                                    this.messageGroups.splice(i, 1);
-                                    this.emit('group-removed', {
-                                        messageGroup: lastMessageGroup,
-                                        insertionIndex: i
-                                    });
-                                }
+                            const messageGroups = this.getMessageGroups();
+                            const lastMessageGroup = _.last(messageGroups);
+                            if (ld && !_.isEmpty(ld) && lastMessageGroup instanceof EditGroup) {
+                                lastMessageGroup.addItem(this.createMessage(li));
+                                lastMessageGroup.removeItem(0);
                             }
-                            if (li) {
+                            else if (li) {
                                 this.addFromSerializedMessage(li);
                             }
                         }
@@ -379,25 +368,37 @@ class MessageGroups extends events_1.EventEmitter {
         });
     }
     ;
-    addFromSerializedMessage(li) {
+    createMessage(li) {
+        if (!_.has(li, 'type')) {
+            return null;
+        }
         const { type } = li;
         if (type === 'text') {
             const sender = this.chatUserList.getUser(li.uid);
-            const message = new TextMessage(sender, li.timestamp, li.message, this.editorStateTracker);
-            return this.addItem(message);
+            return new TextMessage(sender, li.timestamp, li.message, li.editorsVersion, this.editorStateTracker);
         }
         else if (type === 'join') {
             const user = this.chatUserList.getUser(li.uid);
-            this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.connect));
+            return new ConnectionMessage(user, li.timestamp, ConnectionAction.connect);
         }
         else if (type === 'left') {
             const user = this.chatUserList.getUser(li.uid);
-            this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect));
+            return new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect);
         }
         else if (type === 'edit') {
             const users = li.users.map((uid) => this.chatUserList.getUser(uid));
             const editors = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
-            this.addItem(new EditMessage(users, editors, li.endTimestamp, li.fileContents));
+            return new EditMessage(users, editors, li.endTimestamp, li.fileContents);
+        }
+        else {
+            console.error(type);
+            return null;
+        }
+    }
+    addFromSerializedMessage(li) {
+        const message = this.createMessage(li);
+        if (message) {
+            return this.addItem(message);
         }
     }
     typeMatches(item, group) {
@@ -473,6 +474,12 @@ class MessageGroups extends events_1.EventEmitter {
         });
         group.on('item-added', (event) => {
             this.emit('item-added', event);
+        });
+        group.on('item-will-be-removed', (event) => {
+            this.emit('item-will-be-removed', event);
+        });
+        group.on('item-removed', (event) => {
+            this.emit('item-removed', event);
         });
     }
     getMessageGroups() { return this.messageGroups; }

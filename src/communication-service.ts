@@ -5,7 +5,7 @@ import { PusherCommunicationLayer } from './pusher-communication-layer';
 import { SocketIOCommunicationLayer } from './socket-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
-import { UndoableDelta, EditorStateTracker, EditorState } from './editor-state-tracker';
+import { EditorStateTracker, EditorState } from './editor-state-tracker';
 import { CommunicationLayer } from './communication-layer-interface';
 
 declare function require(name:string);
@@ -99,18 +99,18 @@ export class ChannelCommunicationService extends EventEmitter {
 
 
         // Track when users are typing
-    	this.commLayer.bind(this.channelName, 'typing', (data) => {
-            const {uid, status} = data;
-            const user = this.userList.getUser(uid);
-
-            (this as any).emit('typing', _.extend({
-                sender: user
-            }, data));
-
-            if(user) {
-                user.setTypingStatus(status);
-            }
-    	});
+    	// this.commLayer.bind(this.channelName, 'typing', (data) => {
+        //     const {uid, status} = data;
+        //     const user = this.userList.getUser(uid);
+        //
+        //     (this as any).emit('typing', _.extend({
+        //         sender: user
+        //     }, data));
+        //
+        //     if(user) {
+        //         user.setTypingStatus(status);
+        //     }
+    	// });
 
         // Track when something happens in the editor
         // this.commLayer.bind(this.channelName, 'editor-event', (data) => {
@@ -187,6 +187,28 @@ export class ChannelCommunicationService extends EventEmitter {
         // return this.commService.isRoot;
     }
 
+    private cachedEditorVersions:Map<number, Promise<Map<string,any>>> = new Map();
+    public getEditorVersion(version:number):Promise<Map<string, any>> {
+        if(this.cachedEditorVersions.has(version)) {
+            return this.cachedEditorVersions.get(version);
+        } else {
+            const prv = new Promise((resolve, reject) => {
+                this.commLayer.trigger(this.getChannelName(), 'get-editors-values', version, (data) => {
+                    resolve(data);
+                });
+            }).then((data) => {
+                const rv:Map<string, any> = new Map<string, any>();
+
+                _.each(data, (x:any) => {
+                    rv.set(x.id, x);
+                })
+                return rv;
+            });
+            this.cachedEditorVersions.set(version, prv);
+            return prv;
+        }
+    }
+
     /**
      * A promise that resolves when the communication channel is ready
      * @return {Promise<any>} [description]
@@ -226,7 +248,7 @@ export class ChannelCommunicationService extends EventEmitter {
         Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then((info) => {
             const myID:string = info[0]
             const chatDoc:sharedb.Doc = info[1]
-            const editorsDoc:sharedb.Doc = info[1]
+            const editorsDoc:sharedb.Doc = info[2]
 
             const data = {
                 uid: myID,
@@ -279,7 +301,7 @@ export class ChannelCommunicationService extends EventEmitter {
                 uid: myID,
     			remote: remote
             });
-    		const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
+    		// const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
             // this.messageGroups.addDelta(delta);
             this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
         });

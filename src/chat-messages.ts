@@ -73,7 +73,7 @@ export class EditMessage implements Timestamped {
 }
 
 export class TextMessage implements Timestamped {
-	constructor(private sender:ChatUser, private timestamp:number, private message:string, editorStateTracker:EditorStateTracker) {
+	constructor(private sender:ChatUser, private timestamp:number, private message:string, private editorsVersion:number, editorStateTracker:EditorStateTracker) {
 		const htmlBuilder = document.createElement('li');
 		htmlBuilder.innerHTML = this.converter.makeHtml(this.message);
 		_.each(htmlBuilder.querySelectorAll('a'), (a) => {
@@ -102,6 +102,7 @@ export class TextMessage implements Timestamped {
 	public getTimestamp():number { return this.timestamp; };
 	public getMessage():string { return this.message; };
 	public getHTML():string { return this.html; };
+	public getEditorVersion():number { return this.editorsVersion; };
 
 	private converter = new showdown.Converter({simplifiedAutoLink: true});
 	private fileLinkRegexp = new RegExp('^(.+):\s*L(\\d+)(\\s*,\\s*(\\d+))?(\s*-\s*L(\\d+)(\\s*,\\s*(\\d+))?)?$')
@@ -198,6 +199,24 @@ class Group<T extends Timestamped> extends EventEmitter implements MessageGroup<
 	protected constructNew(items):Group<T> {
 		return new Group<T>(items);
 	};
+	public clearItems() {
+		for(let i = 0; i<this.items.length; i++) {
+			this.removeItem(i);
+			i--;
+		}
+	};
+	public removeItem(i:number) {
+		const item = this.items[i];
+		(this as any).emit('item-will-be-removed', {
+			group: this,
+			item: item
+		});
+		this.items.splice(i, 1);
+		(this as any).emit('item-removed', {
+			group: this,
+			item: item
+		});
+	}
 }
 
 export class EditGroup extends Group<EditMessage> {
@@ -232,33 +251,6 @@ export class EditGroup extends Group<EditMessage> {
 			});
 		});
 		return diffs;
-		// const diffs =  _.map()
-		// const textBefore = this.getTextBefore();
-		// const textAfter = this.getTextAfter();
-		// const diffs = [];
-		// for(let i = 0; i<textBefore.length; i++) {
-		// 	let tbEditorState:EditorState = textBefore[i].editorState;
-		// 	for(let j = 0; j<textAfter.length; j++) {
-		// 		let taEditorState:EditorState = textAfter[j].editorState;
-		// 		if(taEditorState === tbEditorState) {
-		// 			const editorState:EditorState = taEditorState;
-		// 			const valueBefore = textBefore[i].value;
-		// 			const valueAfter = textAfter[j].value;
-		// 			let diff = difflib.unifiedDiff(valueBefore, valueAfter, {fromfile:editorState.getTitle(), tofile:editorState.getTitle()});
-		// 			if(diff.length > 0) { diff[0]=diff[0].trim(); }
-		// 			if(diff.length > 1) { diff[1]=diff[1].trim(); }
-		// 			diff = diff.join('\n');
-		// 			diffs.push({
-		// 				editorState: editorState,
-		// 				valueBefore: valueBefore,
-		// 				valueAfter: valueBefore,
-		// 				diff: diff
-		// 			});
-		// 			break;
-		// 		}
-		// 	}
-		// }
-		// return diffs;
 	};
 
 	public getEditorStates():Array<EditorState> {
@@ -287,6 +279,9 @@ export class TextMessageGroup extends Group<TextMessage> {
 	};
 	protected constructNew(items):TextMessageGroup {
 		return new TextMessageGroup(items);
+	};
+	public getEditorVersion():number {
+		return this.getLatestItem().getEditorVersion();
 	};
 };
 
@@ -325,23 +320,12 @@ export class MessageGroups extends EventEmitter {
 	                    const {p, li, ld} = op;
 	                    const [field] = p;
 						if(field === 'messages') {
-							if(ld) {
-								const messageGroups = this.getMessageGroups();
-								const lastMessageGroup = _.last(messageGroups);
-								if(lastMessageGroup instanceof EditGroup) {
-									const i = messageGroups.length - 1;
-									(this as any).emit('group-will-be-removed', {
-										messageGroup: lastMessageGroup,
-										insertionIndex: i
-									});
-									this.messageGroups.splice(i, 1);
-									(this as any).emit('group-removed', {
-										messageGroup: lastMessageGroup,
-										insertionIndex: i
-									});
-								}
-							}
-							if(li) {
+							const messageGroups = this.getMessageGroups();
+							const lastMessageGroup = _.last(messageGroups);
+							if(ld && !_.isEmpty(ld) && lastMessageGroup instanceof EditGroup) {
+								lastMessageGroup.addItem(this.createMessage(li) as EditMessage);
+								lastMessageGroup.removeItem(0);
+							} else if(li) {
 								this.addFromSerializedMessage(li);
 							}
 						}
@@ -350,23 +334,34 @@ export class MessageGroups extends EventEmitter {
 			});
 		});
 	};
-	private addFromSerializedMessage(li) {
+	private createMessage(li):TextMessage|ConnectionMessage|EditMessage {
+		if(!_.has(li, 'type')) {
+			return null;
+		}
+
 		const {type} = li;
 		if(type === 'text') {
 			const sender = this.chatUserList.getUser(li.uid);
-			const message:TextMessage = new TextMessage(sender, li.timestamp, li.message, this.editorStateTracker);
-			return this.addItem(message);
+			return new TextMessage(sender, li.timestamp, li.message, li.editorsVersion, this.editorStateTracker);
 		} else if(type === 'join') {
 			const user = this.chatUserList.getUser(li.uid);
-			this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.connect));
+			return new ConnectionMessage(user, li.timestamp, ConnectionAction.connect);
 		} else if(type === 'left') {
 			const user = this.chatUserList.getUser(li.uid);
-			this.addItem(new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect));
+			return new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect);
 		} else if(type === 'edit') {
 			const users:Array<ChatUser> = li.users.map((uid) => this.chatUserList.getUser(uid));
 			const editors:Array<EditorState> = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
-
-			this.addItem(new EditMessage(users, editors, li.endTimestamp, li.fileContents));
+			return new EditMessage(users, editors, li.endTimestamp, li.fileContents);
+		} else {
+			console.error(type);
+			return null;
+		}
+	}
+	private addFromSerializedMessage(li) {
+		const message = this.createMessage(li);
+		if(message) {
+			return this.addItem(message);
 		}
 	}
 
@@ -442,6 +437,12 @@ export class MessageGroups extends EventEmitter {
 		});
 		(group as any).on('item-added', (event) => {
 			(this as any).emit('item-added', event);
+		});
+		(group as any).on('item-will-be-removed', (event) => {
+			(this as any).emit('item-will-be-removed', event);
+		});
+		(group as any).on('item-removed', (event) => {
+			(this as any).emit('item-removed', event);
 		});
 	}
 

@@ -78,9 +78,14 @@ class SocketIOCommunicationLayer {
             return socket.id;
         });
     }
-    trigger(channelName, eventName, eventContents) {
+    trigger(channelName, eventName, eventContents, callback) {
         this.getNamespace(channelName).then((room) => {
-            room.emit(`data-${eventName}`, eventContents);
+            if (callback) {
+                room.emit(`data-${eventName}`, eventContents, callback);
+            }
+            else {
+                room.emit(`data-${eventName}`, eventContents);
+            }
         });
     }
     ;

@@ -84,9 +84,13 @@ export class SocketIOCommunicationLayer implements CommunicationLayer {
 			return socket.id;
 		});
 	}
-	public trigger(channelName:string, eventName:string, eventContents:any):void {
+	public trigger(channelName:string, eventName:string, eventContents:any, callback?):void {
 		this.getNamespace(channelName).then((room) => {
-			room.emit(`data-${eventName}`, eventContents);
+			if(callback) {
+				room.emit(`data-${eventName}`, eventContents, callback);
+			} else {
+				room.emit(`data-${eventName}`, eventContents);
+			}
 		});
 	};
 
