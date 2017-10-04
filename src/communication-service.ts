@@ -2,7 +2,7 @@ import * as _ from 'underscore';
 import * as sharedb from 'sharedb/lib/client';
 import { ChatUserList, ChatUser } from './chat-user'
 import { PusherCommunicationLayer } from './pusher-communication-layer';
-import { SocketIOCommunicationLayer } from './socket-communication-layer';
+import { WebSocketCommunicationLayer } from './socket-communication-layer';
 import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
 import { EditorStateTracker, EditorState } from './editor-state-tracker';
@@ -78,7 +78,7 @@ export class ChannelCommunicationService extends EventEmitter {
     private chatDoc:Promise<sharedb.Doc>;
     private editorsDoc:Promise<sharedb.Doc>;
     private cursorsDoc:Promise<sharedb.Doc>;
-    private commLayer:SocketIOCommunicationLayer;
+    private commLayer:WebSocketCommunicationLayer;
     /**
      * [constructor description]
      * @param  {CommunicationService} privatecommService The CommunicationService object that created this instance
@@ -173,9 +173,6 @@ export class ChannelCommunicationService extends EventEmitter {
             });
         });
     }
-    public createEditorDoc(id:string, contents:string):Promise<sharedb.Doc> {
-        return this.commLayer.createEditorDoc(this.getChannelName(), id, contents);
-    };
 	public getMyID():Promise<string> {
         return this.commLayer.getMyID(this.getChannelName());
 	}
@@ -192,11 +189,7 @@ export class ChannelCommunicationService extends EventEmitter {
         if(this.cachedEditorVersions.has(version)) {
             return this.cachedEditorVersions.get(version);
         } else {
-            const prv = new Promise((resolve, reject) => {
-                this.commLayer.trigger(this.getChannelName(), 'get-editors-values', version, (data) => {
-                    resolve(data);
-                });
-            }).then((data) => {
+            const prv = this.commLayer.ptrigger(this.getChannelName(), 'get-editors-values', version).then((data) => {
                 const rv:Map<string, any> = new Map<string, any>();
 
                 _.each(data, (x:any) => {
@@ -234,9 +227,6 @@ export class ChannelCommunicationService extends EventEmitter {
      */
     public emitEditorOpened(data):void {
 		const editorState = this.editorStateTracker.onEditorOpened(data, true);
-        this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
-            timestamp: this.getTimestamp()
-        }, data));
         (this as any).emit('editor-opened', data);
     }
 
@@ -425,14 +415,14 @@ export class ChannelCommunicationService extends EventEmitter {
 /* A class to create and manage ChannelCommunicationService instances */
 export class CommunicationService {
     constructor(authInfo, private EditorWrapperClass) {
-        this.commLayer = new SocketIOCommunicationLayer(authInfo);
+        this.commLayer = new WebSocketCommunicationLayer(authInfo);
         // // if(USE_PUSHER) {
         // //     this.commLayer = new PusherCommunicationLayer(authInfo);
         // // } else {
         //     // this.commLayer = new WebSocketCommunicationLayer(authInfo);
         // }
     }
-    public commLayer:SocketIOCommunicationLayer; // The underlying communication mechanism
+    public commLayer:WebSocketCommunicationLayer; // The underlying communication mechanism
     private clients:{[channelName:string]:ChannelCommunicationService} = {}; // Maps channel names to channel comms
 
     /**
