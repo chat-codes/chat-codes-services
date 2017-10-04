@@ -44,11 +44,6 @@ class ChatUser extends events_1.EventEmitter {
     ;
     setTypingStatus(status) {
         this.typingStatus = status;
-        // this.chatDocPromise.then((doc) => {
-        //     const oldValue = doc.data['activeUsers'][this.getID()]['info']['typingStatus'];
-        //     doc.submitOp([{p: ['activeUsers', this.getID(), 'info', 'typingStatus'], od: oldValue, oi: this.getTypingStatus()}]);
-        // });
-        // this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
         this.emit('typingStatus', {
             status: status
         });
@@ -139,13 +134,17 @@ class ChatUserList extends events_1.EventEmitter {
     }
     createUser(userInfo, myID) {
         const { id, joined, left, info } = userInfo;
-        let user = this.allUsers.get(id);
-        if (!user) {
+        if (this.allUsers.has(id)) {
+            const user = this.allUsers.get(id);
+            return user;
+        }
+        else {
             const { name, colorIndex } = info;
             const isMe = (id === myID);
-            user = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
+            const user = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
+            this.allUsers.set(id, user);
+            return user;
         }
-        return user;
     }
     ;
     getUser(id) {

@@ -31,7 +31,7 @@ class NamespaceCommunicator {
 				try {
 					const parsedData = JSON.parse(data);
 					if(parsedData.cc === 2) {
-						if(parsedData.channel == this.getChannelName()) {
+						if(parsedData.ns == this.getShareDBNamespace()) {
 							if(this.responseCallbacks.has(parsedData.messageID)) {
 								const callback = this.responseCallbacks.get(parsedData.messageID);
 								callback(null, parsedData.payload);
@@ -70,7 +70,7 @@ class NamespaceCommunicator {
 			messageID = guid();
 			this.responseCallbacks.set(messageID, callback);
 		}
-		const message = { messageID, type, channel: this.getChannelName(), payload, cc: 1};
+		const message = { messageID, type, ns: this.getShareDBNamespace(), payload, cc: 1};
 		this.wsPromise.then((ws) => {
 			try {
 				ws.send(JSON.stringify(message));

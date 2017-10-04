@@ -155,10 +155,6 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             });
         });
     }
-    createEditorDoc(id, contents) {
-        return this.commLayer.createEditorDoc(this.getChannelName(), id, contents);
-    }
-    ;
     getMyID() {
         return this.commLayer.getMyID(this.getChannelName());
     }
@@ -174,11 +170,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             return this.cachedEditorVersions.get(version);
         }
         else {
-            const prv = new Promise((resolve, reject) => {
-                this.commLayer.trigger(this.getChannelName(), 'get-editors-values', version, (data) => {
-                    resolve(data);
-                });
-            }).then((data) => {
+            const prv = this.commLayer.ptrigger(this.getChannelName(), 'get-editors-values', version).then((data) => {
                 const rv = new Map();
                 _.each(data, (x) => {
                     rv.set(x.id, x);
@@ -212,9 +204,6 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      */
     emitEditorOpened(data) {
         const editorState = this.editorStateTracker.onEditorOpened(data, true);
-        this.commLayer.trigger(this.channelName, 'editor-opened', _.extend({
-            timestamp: this.getTimestamp()
-        }, data));
         this.emit('editor-opened', data);
     }
     /**
@@ -396,7 +385,7 @@ class CommunicationService {
     constructor(authInfo, EditorWrapperClass) {
         this.EditorWrapperClass = EditorWrapperClass;
         this.clients = {}; // Maps channel names to channel comms
-        this.commLayer = new socket_communication_layer_1.SocketIOCommunicationLayer(authInfo);
+        this.commLayer = new socket_communication_layer_1.WebSocketCommunicationLayer(authInfo);
         // // if(USE_PUSHER) {
         // //     this.commLayer = new PusherCommunicationLayer(authInfo);
         // // } else {

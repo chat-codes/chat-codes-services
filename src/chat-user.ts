@@ -35,11 +35,6 @@ export class ChatUser extends EventEmitter {
 
     public setTypingStatus(status:string) {
         this.typingStatus = status;
-        // this.chatDocPromise.then((doc) => {
-        //     const oldValue = doc.data['activeUsers'][this.getID()]['info']['typingStatus'];
-        //     doc.submitOp([{p: ['activeUsers', this.getID(), 'info', 'typingStatus'], od: oldValue, oi: this.getTypingStatus()}]);
-        // });
-        // this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
         (this as any).emit('typingStatus', {
             status: status
         });
@@ -129,15 +124,17 @@ export class ChatUserList extends EventEmitter {
     }
     private createUser(userInfo, myID):ChatUser {
         const {id, joined, left, info} = userInfo;
-        let user:ChatUser = this.allUsers.get(id);
 
-        if(!user) {
+        if(this.allUsers.has(id)) {
+            const user:ChatUser = this.allUsers.get(id);
+            return user;
+        } else {
             const {name, colorIndex} = info;
             const isMe = (id === myID);
-
-            user = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
+            const user:ChatUser = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
+            this.allUsers.set(id, user);
+            return user;
         }
-        return user;
     };
     public getUser(id:string):ChatUser {
         return this.allUsers.get(id);
