@@ -70,9 +70,9 @@ function generateChannelName(commLayer):Promise<string> {
 }
 
 export class ChannelCommunicationService extends EventEmitter {
-    public userList:ChatUserList; // A list of chat userList
-    public messageGroups:MessageGroups // A list of message groups
-    public editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
+    private userList:ChatUserList; // A list of chat userList
+    private messageGroups:MessageGroups // A list of message groups
+    private editorStateTracker:EditorStateTracker; // A tool to help keep track of the editor state
     private myID:string; // The ID assigned to this user
     private _isRoot:boolean=false;
     private chatDoc:Promise<sharedb.Doc>;
@@ -96,70 +96,10 @@ export class ChannelCommunicationService extends EventEmitter {
         this.userList = new ChatUserList(this.getMyID(), this);
         this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new MessageGroups(this, this.userList, this.editorStateTracker);
-
-
-        // Track when users are typing
-    	// this.commLayer.bind(this.channelName, 'typing', (data) => {
-        //     const {uid, status} = data;
-        //     const user = this.userList.getUser(uid);
-        //
-        //     (this as any).emit('typing', _.extend({
-        //         sender: user
-        //     }, data));
-        //
-        //     if(user) {
-        //         user.setTypingStatus(status);
-        //     }
-    	// });
-
-        // Track when something happens in the editor
-        // this.commLayer.bind(this.channelName, 'editor-event', (data) => {
-    	// 	const delta:UndoableDelta = this.editorStateTracker.handleEvent(data, true);
-        //     this.messageGroups.addDelta(delta);
-        //     (this as any).emit('editor-event', data);
-        // });
-
-        // Track when the user moves the cursor
-        // this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
-		// 	const {id, type, uid} = data;
-		// 	let user = this.userList.getUser(uid);
-        //     const cursorID = uid + id;
-        //
-		// 	if(type === 'change-position') { // The caret position changed
-		// 		const {newBufferPosition, oldBufferPosition, newRange, cursorID, editorID} = data;
-		// 		const editorState = this.editorStateTracker.getEditorState(editorID);
-		// 		if(editorState) {
-		// 			const remoteCursors = editorState.getRemoteCursors();
-		// 			remoteCursors.updateCursor(cursorID, user, {row: newBufferPosition[0], column: newBufferPosition[1]});
-		// 		}
-		// 	} else if(type === 'change-selection') { // The selection range changed
-		// 		const {newRange, id, editorID} = data;
-		// 		const editorState = this.editorStateTracker.getEditorState(editorID);
-		// 		if(editorState) {
-		// 			const remoteCursors = editorState.getRemoteCursors();
-		// 			remoteCursors.updateSelection(cursorID, user, newRange);
-		// 		}
-		// 	} else if(type === 'destroy') { // The cursor was destroyed
-		// 		const {newRange, id, editorID} = data;
-		// 		const editorState = this.editorStateTracker.getEditorState(editorID);
-		// 		if(editorState) {
-		// 			const remoteCursors = editorState.getRemoteCursors();
-		// 			remoteCursors.removeCursor(cursorID, user);
-		// 		}
-		// 	}
-        //     (this as any).emit('cursor-event', data);
-        // });
-
-        // A new editor was opened
-    	// this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
-        //     // const mustPerformChange = !this.isRoot();
-    	// 	const editorState:EditorState = this.editorStateTracker.onEditorOpened(data, true);
-        //     _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
-        //         this.messageGroups.addDelta(delta);
-        //     });
-        //     (this as any).emit('editor-opened', data);
-    	// });
     }
+    public getUserList():ChatUserList { return this.userList; };
+    public getEditorStateTracker():EditorStateTracker { return this.editorStateTracker; };
+    public getMessageGroups():MessageGroups { return this.messageGroups; };
     private createDocSubscription(docName:string):Promise<sharedb.Doc> {
         return this.commLayer.getShareDBObject(this.getChannelName(), docName).then((doc) => {
             return new Promise((resolve, reject) => {

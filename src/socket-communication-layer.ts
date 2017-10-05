@@ -137,7 +137,7 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 	constructor(private authInfo) {
 		this.username = authInfo.username;
 		this.wsPromise = new Promise<WebSocket>((resolve, reject) => {
-			const ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
+			const ws = new WebSocket(`ws://${authInfo.host}`);
 			ws.addEventListener('open', (event) => {
 				resolve(ws);
 			});
