@@ -158,7 +158,8 @@ class WebSocketCommunicationLayer {
         this.disconnectListeners = [];
         this.username = authInfo.username;
         this.wsPromise = new Promise((resolve, reject) => {
-            const ws = new WebSocket(`ws://${authInfo.host}`);
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const ws = new WebSocket(`${wsProtocol}://${authInfo.host}`);
             ws.addEventListener('open', (event) => {
                 resolve(ws);
             });
