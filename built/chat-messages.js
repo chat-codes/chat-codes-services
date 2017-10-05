@@ -274,12 +274,22 @@ class EditGroup extends Group {
     }
     ;
     getEditorStates() {
-        const editorStates = _.flatten(this.getItems().map(delta => delta.getEditors()));
-        return _.unique(editorStates);
+        const editorStates = _.chain(this.getItems())
+            .map(delta => delta.getEditors())
+            .flatten()
+            .compact()
+            .unique()
+            .value();
+        return editorStates;
     }
     getAuthors() {
-        const authors = _.flatten(this.getItems().map(delta => delta.getUsers()));
-        return _.unique(authors);
+        const authors = _.chain(this.getItems())
+            .map(delta => delta.getUsers())
+            .flatten()
+            .compact()
+            .unique()
+            .value();
+        return authors;
     }
     compatibleWith(item) {
         return item instanceof EditMessage;
@@ -342,27 +352,26 @@ class MessageGroups extends events_1.EventEmitter {
         this.messageGroupingTimeThreshold = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
         this.messageGroups = [];
         this.chatDocPromise = this.channelService.getShareDBChat();
-        Promise.all([this.chatDocPromise, this.chatUserList.ready]).then(([doc, culReady]) => {
-            this.chatDocPromise.then((doc) => {
-                doc.data['messages'].forEach((li) => {
-                    this.addFromSerializedMessage(li);
-                });
-                doc.on('op', (ops, source) => {
-                    ops.forEach((op) => {
-                        const { p, li, ld } = op;
-                        const [field] = p;
-                        if (field === 'messages') {
-                            const messageGroups = this.getMessageGroups();
-                            const lastMessageGroup = _.last(messageGroups);
-                            if (ld && !_.isEmpty(ld) && lastMessageGroup instanceof EditGroup) {
-                                lastMessageGroup.addItem(this.createMessage(li));
-                                lastMessageGroup.removeItem(0);
-                            }
-                            else if (li) {
-                                this.addFromSerializedMessage(li);
-                            }
+        this.ready = Promise.all([this.chatDocPromise, this.chatUserList.ready, editorStateTracker.ready]).then((info) => {
+            const doc = info[0];
+            doc.data['messages'].forEach((li) => {
+                this.addFromSerializedMessage(li);
+            });
+            doc.on('op', (ops, source) => {
+                ops.forEach((op) => {
+                    const { p, li, ld } = op;
+                    const [field] = p;
+                    if (field === 'messages') {
+                        const messageGroups = this.getMessageGroups();
+                        const lastMessageGroup = _.last(messageGroups);
+                        if (ld && !_.isEmpty(ld) && lastMessageGroup instanceof EditGroup) {
+                            lastMessageGroup.addItem(this.createMessage(li));
+                            lastMessageGroup.removeItem(0);
                         }
-                    });
+                        else if (li) {
+                            this.addFromSerializedMessage(li);
+                        }
+                    }
                 });
             });
         });

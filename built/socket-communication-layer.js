@@ -2,10 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const sharedb = require("sharedb/lib/client");
 class NamespaceCommunicator {
-    constructor(channelName, username, ws) {
+    constructor(channelName, channelID, username, ws, sdbp) {
         this.channelName = channelName;
+        this.channelID = channelID;
         this.username = username;
         this.ws = ws;
+        this.sdbp = sdbp;
         this.responseCallbacks = new Map();
         this.typeCallbacks = new Map();
         this.id = `/${this.getChannelName()}#${guid()}`;
@@ -47,6 +49,7 @@ class NamespaceCommunicator {
             if (this.getChannelName()) {
                 return this.pemit('request-join-room', {
                     channel: this.getChannelName(),
+                    channelID: this.channelID,
                     username: this.username,
                     id: this.getID()
                 });
@@ -95,7 +98,7 @@ class NamespaceCommunicator {
         });
     }
     ;
-    on(type, callback) {
+    bind(type, callback) {
         if (this.typeCallbacks.has(type)) {
             this.typeCallbacks.get(type).push(callback);
         }
@@ -103,7 +106,7 @@ class NamespaceCommunicator {
             this.typeCallbacks.set(type, [callback]);
         }
     }
-    off(type, callback) {
+    unbind(type, callback) {
         if (this.typeCallbacks.has(type)) {
             const callbacks = this.typeCallbacks.get(type);
             for (let i = 0; i < callbacks.length; i++) {
@@ -128,10 +131,26 @@ class NamespaceCommunicator {
     ;
     getShareDBNamespace() { return this.shareDBNamespace; }
     ;
+    getShareDBObject(path) {
+        return this.sdbp.then((connection) => {
+            return connection.get(this.getShareDBNamespace(), path);
+        });
+    }
+    ;
     destroy() {
     }
     ;
+    trigger(channelName, eventName, eventContents, callback) {
+        if (callback) {
+            this.emit(eventName, eventContents, callback);
+        }
+        else {
+            this.emit(eventName, eventContents);
+        }
+    }
+    ;
 }
+exports.NamespaceCommunicator = NamespaceCommunicator;
 class WebSocketCommunicationLayer {
     constructor(authInfo) {
         this.authInfo = authInfo;
@@ -139,7 +158,7 @@ class WebSocketCommunicationLayer {
         this.disconnectListeners = [];
         this.username = authInfo.username;
         this.wsPromise = new Promise((resolve, reject) => {
-            const ws = new WebSocket(`ws://${authInfo.host}:${authInfo.port}`);
+            const ws = new WebSocket(`ws://${authInfo.host}`);
             ws.addEventListener('open', (event) => {
                 resolve(ws);
             });
@@ -148,7 +167,7 @@ class WebSocketCommunicationLayer {
             });
         });
         this.mainSocket = this.wsPromise.then((ws) => {
-            return new NamespaceCommunicator(null, this.username, ws).ready();
+            return new NamespaceCommunicator(null, null, this.username, ws, this.shareDBConnectionPromise).ready();
         });
         this.shareDBConnectionPromise = this.wsPromise.then((ws) => {
             const connection = new sharedb.Connection(ws);
@@ -163,55 +182,18 @@ class WebSocketCommunicationLayer {
     getShareDBConnection() {
         return this.shareDBConnectionPromise;
     }
-    getNamespace(name) {
-        if (this.namespaces.has(name)) {
-            return this.namespaces.get(name);
+    getNamespace(channelName, channelID) {
+        if (this.namespaces.has(channelName)) {
+            return this.namespaces.get(channelName);
         }
         else {
             const namespacePromise = this.wsPromise.then((ws) => {
-                return new NamespaceCommunicator(name, this.username, ws).ready();
+                return new NamespaceCommunicator(channelName, channelID, this.username, ws, this.shareDBConnectionPromise).ready();
             });
-            this.namespaces.set(name, namespacePromise);
+            this.namespaces.set(channelName, namespacePromise);
             return namespacePromise;
         }
     }
-    getMyID(channelName) {
-        return this.getNamespace(channelName).then((ns) => {
-            return ns.getID();
-        });
-    }
-    trigger(channelName, eventName, eventContents, callback) {
-        this.getNamespace(channelName).then((room) => {
-            if (callback) {
-                room.emit(eventName, eventContents, callback);
-            }
-            else {
-                room.emit(eventName, eventContents);
-            }
-        });
-    }
-    ;
-    ptrigger(channelName, eventName, eventContents) {
-        return this.getNamespace(channelName).then((room) => {
-            return room.pemit(eventName, eventContents);
-        });
-    }
-    getShareDBObject(channelName, path) {
-        return Promise.all([this.getNamespace(channelName), this.shareDBConnectionPromise]).then((info) => {
-            const room = info[0];
-            const connection = info[1];
-            const shareDBNamespace = room.getShareDBNamespace();
-            const doc = connection.get(shareDBNamespace, path);
-            return doc;
-        });
-    }
-    ;
-    bind(channelName, eventName, callback) {
-        this.getNamespace(channelName).then((ns) => {
-            ns.on(eventName, callback);
-        });
-    }
-    ;
     getMembers(channelName) {
         return this.getNamespace(channelName).then((room) => {
             return new Promise((resolve, reject) => {
@@ -230,26 +212,6 @@ class WebSocketCommunicationLayer {
                 });
             });
         });
-    }
-    ;
-    onMemberAdded(channelName, callback) {
-        this.getNamespace(channelName).then((room) => {
-            room.on('member-added', (member) => {
-                callback(member);
-            });
-        });
-    }
-    ;
-    onMemberRemoved(channelName, callback) {
-        this.getNamespace(channelName).then((room) => {
-            room.on('member-removed', (member) => {
-                callback(member);
-            });
-        });
-    }
-    ;
-    channelReady(channelName) {
-        return this.getNamespace(channelName);
     }
     ;
     destroy() {

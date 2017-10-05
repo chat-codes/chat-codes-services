@@ -6,15 +6,14 @@ import * as textType from 'ot-text';
 import * as json0Type from 'ot-json0';
 declare var window;
 
-class NamespaceCommunicator {
+export class NamespaceCommunicator {
 	private id:string;
 	private responseCallbacks:Map<string, (err, data)=>any> = new Map();
 	private typeCallbacks:Map<string, Array<(err, data)=>any>> = new Map();
 	private readyPromise:Promise<NamespaceCommunicator>;
 	private wsPromise:Promise<WebSocket>;
-	private channelID:string;
 	private shareDBNamespace:string;
-	public constructor(private channelName:string, private username:string, private ws:WebSocket) {
+	public constructor(private channelName:string, private channelID:string, private username:string, private ws:WebSocket, private sdbp:Promise<sharedb.Connection>) {
 		this.id = `/${this.getChannelName()}#${guid()}`;
 		this.wsPromise = new Promise((resolve, reject) => {
 			if(this.ws.readyState === WebSocket.OPEN) {
@@ -51,6 +50,7 @@ class NamespaceCommunicator {
 			if(this.getChannelName()) {
 				return this.pemit('request-join-room', {
 					channel: this.getChannelName(),
+					channelID: this.channelID,
 					username: this.username,
 					id: this.getID()
 				});
@@ -92,14 +92,14 @@ class NamespaceCommunicator {
 			this.emit(type, payload, callback);
 		});
 	};
-	public on(type:string, callback) {
+	public bind(type:string, callback) {
 		if(this.typeCallbacks.has(type)) {
 			this.typeCallbacks.get(type).push(callback);
 		} else {
 			this.typeCallbacks.set(type, [callback]);
 		}
 	}
-	public off(type:string, callback) {
+	public unbind(type:string, callback) {
 		if(this.typeCallbacks.has(type)) {
 			const callbacks = this.typeCallbacks.get(type);
 			for(let i = 0; i<callbacks.length; i++) {
@@ -122,8 +122,20 @@ class NamespaceCommunicator {
 	public getChannelName():string { return this.channelName; };
 	public getChannelID():string { return this.channelID; };
 	public getShareDBNamespace():string { return this.shareDBNamespace; };
+	public getShareDBObject(path:string):Promise<sharedb.Doc> {
+		return this.sdbp.then((connection) => {
+			return connection.get(this.getShareDBNamespace(), path);
+		});
+	};
 	public destroy() {
 
+	};
+	public trigger(channelName:string, eventName:string, eventContents:any, callback?):void {
+		if(callback) {
+			this.emit(eventName, eventContents, callback);
+		} else {
+			this.emit(eventName, eventContents);
+		}
 	};
 }
 
@@ -146,7 +158,7 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 			});
 		});
 		this.mainSocket = this.wsPromise.then((ws) => {
-			return new NamespaceCommunicator(null, this.username, ws).ready();
+			return new NamespaceCommunicator(null, null, this.username, ws, this.shareDBConnectionPromise).ready();
 		});
 		this.shareDBConnectionPromise = this.wsPromise.then((ws) => {
 			const connection = new sharedb.Connection(ws);
@@ -161,52 +173,17 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 	public getShareDBConnection():Promise<sharedb.Connection> {
 		return this.shareDBConnectionPromise;
 	}
-	private getNamespace(name:string):Promise<NamespaceCommunicator> {
-		if(this.namespaces.has(name)) {
-			return this.namespaces.get(name);
+	public getNamespace(channelName:string, channelID?:string):Promise<NamespaceCommunicator> {
+		if(this.namespaces.has(channelName)) {
+			return this.namespaces.get(channelName);
 		} else {
 			const namespacePromise = this.wsPromise.then((ws) => {
-				return new NamespaceCommunicator(name, this.username, ws).ready();
+				return new NamespaceCommunicator(channelName, channelID, this.username, ws, this.shareDBConnectionPromise).ready();
 			});
-			this.namespaces.set(name, namespacePromise);
+			this.namespaces.set(channelName, namespacePromise);
 			return namespacePromise;
 		}
 	}
-	public getMyID(channelName:string):Promise<string> {
-		return this.getNamespace(channelName).then((ns) => {
-			return ns.getID();
-		});
-	}
-	public trigger(channelName:string, eventName:string, eventContents:any, callback?):void {
-		this.getNamespace(channelName).then((room) => {
-			if(callback) {
-				room.emit(eventName, eventContents, callback);
-			} else {
-				room.emit(eventName, eventContents);
-			}
-		});
-	};
-	public ptrigger(channelName, eventName:string, eventContents:any):Promise<any> {
-		return this.getNamespace(channelName).then((room) => {
-			return room.pemit(eventName, eventContents);
-		});
-	}
-
-	public getShareDBObject(channelName:string, path:string):Promise<sharedb.Doc> {
-		return Promise.all([this.getNamespace(channelName), this.shareDBConnectionPromise]).then((info) => {
-			const room:NamespaceCommunicator = info[0];
-			const connection:sharedb.Connection = info[1];
-			const shareDBNamespace = room.getShareDBNamespace();
-			const doc = connection.get(shareDBNamespace, path);
-			return doc;
-		});
-	};
-
-	public bind(channelName:string, eventName:string, callback:(any)=>any):void {
-		this.getNamespace(channelName).then((ns) => {
-			ns.on(eventName, callback);
-		});
-	};
 	public getMembers(channelName:string):Promise<any> {
 		return this.getNamespace(channelName).then((room) => {
 			return new Promise((resolve, reject) => {
@@ -224,23 +201,6 @@ export class WebSocketCommunicationLayer implements CommunicationLayer {
 				});
 			});
 		});
-	};
-	public onMemberAdded(channelName:string, callback:(event)=>any):void {
-		this.getNamespace(channelName).then((room) => {
-			room.on('member-added', (member) => {
-				callback(member);
-			});
-		});
-	};
-	public onMemberRemoved(channelName:string, callback:(event)=>any):void {
-		this.getNamespace(channelName).then((room) => {
-			room.on('member-removed', (member) => {
-				callback(member);
-			});
-		});
-	};
-	public channelReady(channelName:string):Promise<any> {
-		return this.getNamespace(channelName);
 	};
 	public destroy():void {
 		// this.manager.then((manager) => {

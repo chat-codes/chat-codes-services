@@ -151,7 +151,9 @@ export class EditorState {
 		this.title = state.title;
 
 		this.editorWrapper.setEditorState(this);
-		this.editorWrapper.setGrammar(state.grammarName);
+		setTimeout(() => {
+			this.editorWrapper.setGrammar(state.grammarName);
+		}, 100)
 		this.editorID = state.id;
 		state.cursors.forEach((c) => { });
 	}
@@ -204,9 +206,10 @@ export class EditorStateTracker extends EventEmitter {
     private editorStates:Map<string, EditorState> = new Map();
 	private currentVersion:number=CURRENT;
 	private currentTimestamp:number=CURRENT;
+    public ready:Promise<boolean>;
     constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
 		super();
-		this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+		const editorsDocPromise = this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
 			editorDoc.data.forEach((li) => {
 				this.onEditorOpened(li, true);
 			});
@@ -222,7 +225,7 @@ export class EditorStateTracker extends EventEmitter {
 				});
 			});
 		});
-		this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
+		const cursorsDocPromise =this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
 			_.each(cursorsDoc.data, (cursorInfo:any, editorID:string) => {
 				const editor = this.getEditorState(editorID);
 				if(editor) {
@@ -279,6 +282,7 @@ export class EditorStateTracker extends EventEmitter {
 					}
 				});
 			});
+
 			// if(p.length === 3) {
 			// 	const editorID = editorDoc.data[p[0]]['id'];
 			// 	const editor = this.getEditorState(editorID);
@@ -301,6 +305,9 @@ export class EditorStateTracker extends EventEmitter {
 			// 		}
 			// 	}
 			// }
+		});
+		this.ready = Promise.all([editorsDocPromise, cursorsDocPromise]).then(() => {
+			return true;
 		});
 	}
 

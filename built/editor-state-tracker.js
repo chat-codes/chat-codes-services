@@ -107,7 +107,9 @@ class EditorState {
         this.isOpen = state.isOpen;
         this.title = state.title;
         this.editorWrapper.setEditorState(this);
-        this.editorWrapper.setGrammar(state.grammarName);
+        setTimeout(() => {
+            this.editorWrapper.setGrammar(state.grammarName);
+        }, 100);
         this.editorID = state.id;
         state.cursors.forEach((c) => { });
     }
@@ -174,7 +176,7 @@ class EditorStateTracker extends events_1.EventEmitter {
         this.editorStates = new Map();
         this.currentVersion = CURRENT;
         this.currentTimestamp = CURRENT;
-        this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
+        const editorsDocPromise = this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
             editorDoc.data.forEach((li) => {
                 this.onEditorOpened(li, true);
             });
@@ -190,7 +192,7 @@ class EditorStateTracker extends events_1.EventEmitter {
                 });
             });
         });
-        this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
+        const cursorsDocPromise = this.channelCommunicationService.getShareDBCursors().then((cursorsDoc) => {
             _.each(cursorsDoc.data, (cursorInfo, editorID) => {
                 const editor = this.getEditorState(editorID);
                 if (editor) {
@@ -275,6 +277,9 @@ class EditorStateTracker extends events_1.EventEmitter {
             // 		}
             // 	}
             // }
+        });
+        this.ready = Promise.all([editorsDocPromise, cursorsDocPromise]).then(() => {
+            return true;
         });
     }
     createEditor(id, title, contents, grammarName, modified) {

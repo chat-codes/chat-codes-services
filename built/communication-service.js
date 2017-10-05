@@ -7,61 +7,6 @@ const events_1 = require("events");
 const chat_messages_1 = require("./chat-messages");
 const editor_state_tracker_1 = require("./editor-state-tracker");
 const DEBUG = false;
-const USE_PUSHER = false;
-/**
- * Come up with a channel name from a list of words. If we can't find an empty channel, we just start adding
- * numbers to the channel name
- * @param  {any}          commLayer The communication channel service
- * @return {Promise<string>}           A promise whose value will resolve to the name of a channel that is empty
- */
-function generateChannelName(commLayer) {
-    const fs = require('fs');
-    const path = require('path');
-    if (DEBUG) {
-        return Promise.resolve('example_channel');
-    }
-    else {
-        const WORD_FILE_NAME = 'google-10000-english-usa-no-swears-medium.txt';
-        //Open up the list of words
-        return new Promise(function (resolve, reject) {
-            fs.readFile(path.join(__dirname, WORD_FILE_NAME), { encoding: 'utf-8' }, function (err, result) {
-                if (err) {
-                    reject(err);
-                }
-                else {
-                    resolve(result);
-                }
-            });
-        }).then(function (words) {
-            // Put the list of opened words in a random order
-            return _.shuffle(words.split(/\n/));
-        }).then(function (wordList) {
-            function* getNextWord() {
-                for (var i = 0; i < wordList.length; i++) {
-                    yield wordList[i];
-                }
-                // If we couldn't find anything, start adding numbers to the end of words
-                var j = 0;
-                while (true) {
-                    yield wordList[j % wordList.length] + j + '';
-                    j++;
-                }
-            }
-            function getNextAvailableName(iterator) {
-                const { value } = iterator.next();
-                return commLayer.channelNameAvailable(value).then(function (available) {
-                    if (available) {
-                        return value;
-                    }
-                    else {
-                        return getNextAvailableName(iterator);
-                    }
-                });
-            }
-            return getNextAvailableName(getNextWord());
-        });
-    }
-}
 class ChannelCommunicationService extends events_1.EventEmitter {
     /**
      * [constructor description]
@@ -69,80 +14,32 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param  {string}               channelName The name of the channel we're communicating on
      * @param  {class}               EditorWrapperClass A class whose instances satisfy the EditorWrapper interface
      */
-    constructor(commService, channelName, EditorWrapperClass) {
+    constructor(commService, channelName, channelID, EditorWrapperClass) {
         super();
         this.commService = commService;
         this.channelName = channelName;
+        this.channelID = channelID;
         this._isRoot = false;
         this.cachedEditorVersions = new Map();
         this.commLayer = commService.commLayer;
+        this.channelCommLayer = this.commLayer.getNamespace(this.getChannelName(), this.channelID);
         this.chatDoc = this.createDocSubscription('chat');
         this.editorsDoc = this.createDocSubscription('editors');
         this.cursorsDoc = this.createDocSubscription('cursors');
         this.userList = new chat_user_1.ChatUserList(this.getMyID(), this);
         this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, this, this.userList);
         this.messageGroups = new chat_messages_1.MessageGroups(this, this.userList, this.editorStateTracker);
-        // Track when users are typing
-        // this.commLayer.bind(this.channelName, 'typing', (data) => {
-        //     const {uid, status} = data;
-        //     const user = this.userList.getUser(uid);
-        //
-        //     (this as any).emit('typing', _.extend({
-        //         sender: user
-        //     }, data));
-        //
-        //     if(user) {
-        //         user.setTypingStatus(status);
-        //     }
-        // });
-        // Track when something happens in the editor
-        // this.commLayer.bind(this.channelName, 'editor-event', (data) => {
-        // 	const delta:UndoableDelta = this.editorStateTracker.handleEvent(data, true);
-        //     this.messageGroups.addDelta(delta);
-        //     (this as any).emit('editor-event', data);
-        // });
-        // Track when the user moves the cursor
-        // this.commLayer.bind(this.channelName, 'cursor-event', (data) => {
-        // 	const {id, type, uid} = data;
-        // 	let user = this.userList.getUser(uid);
-        //     const cursorID = uid + id;
-        //
-        // 	if(type === 'change-position') { // The caret position changed
-        // 		const {newBufferPosition, oldBufferPosition, newRange, cursorID, editorID} = data;
-        // 		const editorState = this.editorStateTracker.getEditorState(editorID);
-        // 		if(editorState) {
-        // 			const remoteCursors = editorState.getRemoteCursors();
-        // 			remoteCursors.updateCursor(cursorID, user, {row: newBufferPosition[0], column: newBufferPosition[1]});
-        // 		}
-        // 	} else if(type === 'change-selection') { // The selection range changed
-        // 		const {newRange, id, editorID} = data;
-        // 		const editorState = this.editorStateTracker.getEditorState(editorID);
-        // 		if(editorState) {
-        // 			const remoteCursors = editorState.getRemoteCursors();
-        // 			remoteCursors.updateSelection(cursorID, user, newRange);
-        // 		}
-        // 	} else if(type === 'destroy') { // The cursor was destroyed
-        // 		const {newRange, id, editorID} = data;
-        // 		const editorState = this.editorStateTracker.getEditorState(editorID);
-        // 		if(editorState) {
-        // 			const remoteCursors = editorState.getRemoteCursors();
-        // 			remoteCursors.removeCursor(cursorID, user);
-        // 		}
-        // 	}
-        //     (this as any).emit('cursor-event', data);
-        // });
-        // A new editor was opened
-        // this.commLayer.bind(this.channelName, 'editor-opened', (data) => {
-        //     // const mustPerformChange = !this.isRoot();
-        // 	const editorState:EditorState = this.editorStateTracker.onEditorOpened(data, true);
-        //     _.each(editorState.getDeltas(), (delta:UndoableDelta) => {
-        //         this.messageGroups.addDelta(delta);
-        //     });
-        //     (this as any).emit('editor-opened', data);
-        // });
     }
+    getUserList() { return this.userList; }
+    ;
+    getEditorStateTracker() { return this.editorStateTracker; }
+    ;
+    getMessageGroups() { return this.messageGroups; }
+    ;
     createDocSubscription(docName) {
-        return this.commLayer.getShareDBObject(this.getChannelName(), docName).then((doc) => {
+        return this.channelCommLayer.then((ccomm) => {
+            return ccomm.getShareDBObject(docName);
+        }).then((doc) => {
             return new Promise((resolve, reject) => {
                 doc.subscribe((err) => {
                     if (err) {
@@ -156,21 +53,21 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         });
     }
     getMyID() {
-        return this.commLayer.getMyID(this.getChannelName());
+        return this.channelCommLayer.then((ccomm) => {
+            return ccomm.getID();
+        });
     }
     getShareDBChat() { return this.chatDoc; }
     getShareDBEditors() { return this.editorsDoc; }
     getShareDBCursors() { return this.cursorsDoc; }
-    isRoot() {
-        return this._isRoot;
-        // return this.commService.isRoot;
-    }
     getEditorVersion(version) {
         if (this.cachedEditorVersions.has(version)) {
             return this.cachedEditorVersions.get(version);
         }
         else {
-            const prv = this.commLayer.ptrigger(this.getChannelName(), 'get-editors-values', version).then((data) => {
+            const prv = this.channelCommLayer.then((ccomm) => {
+                return ccomm.pemit('get-editors-values', version);
+            }).then((data) => {
                 const rv = new Map();
                 _.each(data, (x) => {
                     rv.set(x.id, x);
@@ -186,7 +83,7 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @return {Promise<any>} [description]
      */
     ready() {
-        return this.commLayer.channelReady(this.channelName);
+        return Promise.all([this.channelCommLayer, this.editorStateTracker.ready, this.userList.ready, this.messageGroups.ready]);
     }
     /**
      * Request that the user saves a particular file
@@ -239,17 +136,6 @@ class ChannelCommunicationService extends events_1.EventEmitter {
             const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
             doc.submitOp([{ p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status }]);
         });
-        // const meUser = this.userList.getMe();
-        //
-        // this.commLayer.trigger(this.channelName, 'typing', data);
-        //
-        // (this as any).emit('typing', _.extend({
-        //     sender: this.userList.getMe()
-        // }, data));
-        //
-        // if(meUser) {
-        //     meUser.setTypingStatus(status);
-        // }
     }
     /**
      * The user modified something in the editor
@@ -257,15 +143,14 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=true whether the change was made by a remote client or on the editor
      */
     emitEditorChanged(serializedDelta, remote = true) {
-        this.getMyID().then((myID) => {
+        this.channelCommLayer.then((ccomm) => {
+            const myID = ccomm.getID();
             _.extend(serializedDelta, {
                 timestamp: this.getTimestamp(),
                 uid: myID,
                 remote: remote
             });
-            // const delta:UndoableDelta = this.editorStateTracker.handleEvent(serializedDelta, serializedDelta.type !== 'edit');
-            // this.messageGroups.addDelta(delta);
-            this.commLayer.trigger(this.channelName, 'editor-event', serializedDelta);
+            return ccomm.pemit('editor-event', serializedDelta);
         });
     }
     /**
@@ -338,19 +223,23 @@ class ChannelCommunicationService extends events_1.EventEmitter {
      * @param {[type]} remote=false Whether this was outputted by a remote client
      */
     emitTerminalData(data, remote = false) {
-        this.commLayer.trigger(this.channelName, 'terminal-data', {
-            timestamp: this.getTimestamp(),
-            data: data,
-            remote: remote
+        this.channelCommLayer.then((ccomm) => {
+            return ccomm.pemit('terminal-data', {
+                timestamp: this.getTimestamp(),
+                data: data,
+                remote: remote
+            });
         });
     }
     ;
     writeToTerminal(data) {
-        this.commLayer.trigger(this.channelName, 'write-to-terminal', {
-            timestamp: this.getTimestamp(),
-            uid: this.myID,
-            remote: true,
-            contents: data
+        this.channelCommLayer.then((ccomm) => {
+            return ccomm.pemit('write-to-terminal', {
+                timestamp: this.getTimestamp(),
+                uid: this.myID,
+                remote: true,
+                contents: data
+            });
         });
     }
     getURL() {
@@ -362,7 +251,9 @@ class ChannelCommunicationService extends events_1.EventEmitter {
         });
     }
     destroy() {
-        this.commLayer.destroy();
+        this.channelCommLayer.then((ccomm) => {
+            ccomm.destroy();
+        });
     }
     getActiveEditors() {
         return this.editorStateTracker.getActiveEditors();
@@ -393,21 +284,12 @@ class CommunicationService {
         // }
     }
     /**
-     * Create a channel with a randomly generated name
-     * @return {Promise<ChannelCommunicationService>} A promise that resolves to the channel
-     */
-    createChannel() {
-        return generateChannelName(this.commLayer).then((channelName) => {
-            return this.createChannelWithName(channelName);
-        });
-    }
-    /**
      * Create a new channel and supply the name
      * @param  {string}                      channelName The name of the channel
      * @return {ChannelCommunicationService}             The communication channel
      */
-    createChannelWithName(channelName) {
-        var channel = new ChannelCommunicationService(this, channelName, this.EditorWrapperClass);
+    createChannelWithName(channelName, channelID) {
+        var channel = new ChannelCommunicationService(this, channelName, channelID, this.EditorWrapperClass);
         this.clients[channelName] = channel;
         return channel;
     }
