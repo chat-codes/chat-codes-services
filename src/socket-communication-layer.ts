@@ -1,5 +1,4 @@
-import { CommunicationLayer } from './communication-layer-interface';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'typed-event-emitter';
 import * as sharedb from 'sharedb/lib/client';
 import * as _ from 'underscore';
 import * as textType from 'ot-text';
@@ -139,7 +138,7 @@ export class NamespaceCommunicator {
 	};
 }
 
-export class WebSocketCommunicationLayer implements CommunicationLayer {
+export class WebSocketCommunicationLayer {
 	private mainSocket:Promise<NamespaceCommunicator>;
 	private wsPromise:Promise<WebSocket>;
 	private shareDBConnectionPromise:Promise<sharedb.Connection>;

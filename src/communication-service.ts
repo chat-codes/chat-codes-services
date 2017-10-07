@@ -2,15 +2,9 @@ import * as _ from 'underscore';
 import * as sharedb from 'sharedb/lib/client';
 import { ChatUserList, ChatUser } from './chat-user'
 import { WebSocketCommunicationLayer, NamespaceCommunicator } from './socket-communication-layer';
-import { EventEmitter } from 'events';
 import { MessageGroups } from './chat-messages';
+import { EventEmitter } from 'typed-event-emitter';
 import { EditorStateTracker, EditorState } from './editor-state-tracker';
-import { CommunicationLayer } from './communication-layer-interface';
-
-declare function require(name:string);
-declare var __dirname:string;
-
-const DEBUG = false;
 
 export class ChannelCommunicationService extends EventEmitter {
     private userList:ChatUserList; // A list of chat userList
@@ -189,24 +183,7 @@ export class ChannelCommunicationService extends EventEmitter {
                 oi['userCursors'][myID] = delta;
                 doc.submitOp({p: [editorID], oi});
             }
-            // for(let i = 0; i<doc.data.length; i++) {
-            //     let editorState = doc.data[i];
-            //     if(editorState.id === delta.editorID) {
-            //         const oldDelta = editorState.userCursors[myID];
-            //         // const {newBufferPosition} = delta;
-            //
-            //         doc.submitOp({p:[i, 'userCursors', myID], od: oldDelta, oi: delta});
-            //         break;
-            //     }
-            // }
-            // const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
-            // doc.submitOp([{p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status}]);
         });
-        // this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
-		// 	timestamp: this.getTimestamp(),
-        //     uid: this.myID,
-		// 	remote: remote
-		// }, delta));
     }
 
     /**
@@ -227,13 +204,6 @@ export class ChannelCommunicationService extends EventEmitter {
                 doc.submitOp({p: [editorID], oi});
             }
         });
-        // const uid = this.getMyID();
-        // console.log(delta);
-        // this.commLayer.trigger(this.channelName, 'cursor-event', _.extend({
-		// 	timestamp: this.getTimestamp(),
-        //     uid: this.myID,
-		// 	remote: remote
-		// }, delta));
     }
 
     /**
@@ -262,14 +232,7 @@ export class ChannelCommunicationService extends EventEmitter {
         });
     }
 
-    public getURL():string {
-        const url = require('url');
-        return url.format({
-            protocol: 'http',
-            host: 'chat.codes',
-            pathname: this.channelName
-        });
-    }
+    public getURL():string { return `https://chat.codes/${this.getChannelName()}`; }
 
     public destroy():void {
         this.channelCommLayer.then((ccomm) => {

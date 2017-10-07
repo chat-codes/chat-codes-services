@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const sharedb = require("sharedb/lib/client");
-class NamespaceCommunicator {
-    constructor(channelName, channelID, username, ws, sdbp) {
+var sharedb = require("sharedb/lib/client");
+var NamespaceCommunicator = /** @class */ (function () {
+    function NamespaceCommunicator(channelName, channelID, username, ws, sdbp) {
+        var _this = this;
         this.channelName = channelName;
         this.channelID = channelID;
         this.username = username;
@@ -10,33 +11,33 @@ class NamespaceCommunicator {
         this.sdbp = sdbp;
         this.responseCallbacks = new Map();
         this.typeCallbacks = new Map();
-        this.id = `/${this.getChannelName()}#${guid()}`;
-        this.wsPromise = new Promise((resolve, reject) => {
-            if (this.ws.readyState === WebSocket.OPEN) {
-                resolve(this.ws);
+        this.id = "/" + this.getChannelName() + "#" + guid();
+        this.wsPromise = new Promise(function (resolve, reject) {
+            if (_this.ws.readyState === WebSocket.OPEN) {
+                resolve(_this.ws);
             }
             else {
-                this.ws.addEventListener('open', (event) => {
-                    resolve(this.ws);
+                _this.ws.addEventListener('open', function (event) {
+                    resolve(_this.ws);
                 });
             }
         });
-        this.readyPromise = this.wsPromise.then(() => {
-            ws.addEventListener('message', (event) => {
-                const { data } = event;
+        this.readyPromise = this.wsPromise.then(function () {
+            ws.addEventListener('message', function (event) {
+                var data = event.data;
                 try {
-                    const parsedData = JSON.parse(data);
-                    if (parsedData.cc === 2) {
-                        if (parsedData.ns == this.getShareDBNamespace()) {
-                            if (this.responseCallbacks.has(parsedData.messageID)) {
-                                const callback = this.responseCallbacks.get(parsedData.messageID);
-                                callback(null, parsedData.payload);
-                                this.responseCallbacks.delete(parsedData.messageID);
+                    var parsedData_1 = JSON.parse(data);
+                    if (parsedData_1.cc === 2) {
+                        if (parsedData_1.ns == _this.getShareDBNamespace()) {
+                            if (_this.responseCallbacks.has(parsedData_1.messageID)) {
+                                var callback = _this.responseCallbacks.get(parsedData_1.messageID);
+                                callback(null, parsedData_1.payload);
+                                _this.responseCallbacks.delete(parsedData_1.messageID);
                             }
-                            else if (this.typeCallbacks.has(parsedData.type)) {
-                                const callbacks = this.typeCallbacks.get(parsedData.type);
-                                callbacks.forEach((callback) => {
-                                    callback(null, parsedData.payload);
+                            else if (_this.typeCallbacks.has(parsedData_1.type)) {
+                                var callbacks = _this.typeCallbacks.get(parsedData_1.type);
+                                callbacks.forEach(function (callback) {
+                                    callback(null, parsedData_1.payload);
                                 });
                             }
                         }
@@ -46,47 +47,49 @@ class NamespaceCommunicator {
                     console.error(e);
                 }
             });
-            if (this.getChannelName()) {
-                return this.pemit('request-join-room', {
-                    channel: this.getChannelName(),
-                    channelID: this.channelID,
-                    username: this.username,
-                    id: this.getID()
+            if (_this.getChannelName()) {
+                return _this.pemit('request-join-room', {
+                    channel: _this.getChannelName(),
+                    channelID: _this.channelID,
+                    username: _this.username,
+                    id: _this.getID()
                 });
             }
             else {
                 return true;
             }
-        }).then((result) => {
-            const { id, ns } = result;
-            this.channelID = id;
-            this.shareDBNamespace = ns;
-            return this;
+        }).then(function (result) {
+            var id = result.id, ns = result.ns;
+            _this.channelID = id;
+            _this.shareDBNamespace = ns;
+            return _this;
         });
     }
-    emit(type, payload, callback) {
-        let messageID = null;
+    NamespaceCommunicator.prototype.emit = function (type, payload, callback) {
+        var _this = this;
+        var messageID = null;
         if (callback) {
             messageID = guid();
             this.responseCallbacks.set(messageID, callback);
         }
-        const message = { messageID, type, ns: this.getShareDBNamespace(), payload, cc: 1 };
-        this.wsPromise.then((ws) => {
+        var message = { messageID: messageID, type: type, ns: this.getShareDBNamespace(), payload: payload, cc: 1 };
+        this.wsPromise.then(function (ws) {
             try {
                 ws.send(JSON.stringify(message));
             }
             catch (e) {
                 if (callback) {
                     callback(e);
-                    this.responseCallbacks.delete(messageID);
+                    _this.responseCallbacks.delete(messageID);
                 }
                 console.error(e);
             }
         });
-    }
-    pemit(type, payload) {
-        return new Promise((resolve, reject) => {
-            const callback = (err, data) => {
+    };
+    NamespaceCommunicator.prototype.pemit = function (type, payload) {
+        var _this = this;
+        return new Promise(function (resolve, reject) {
+            var callback = function (err, data) {
                 if (err) {
                     reject(err);
                 }
@@ -94,23 +97,23 @@ class NamespaceCommunicator {
                     resolve(data);
                 }
             };
-            this.emit(type, payload, callback);
+            _this.emit(type, payload, callback);
         });
-    }
+    };
     ;
-    bind(type, callback) {
+    NamespaceCommunicator.prototype.bind = function (type, callback) {
         if (this.typeCallbacks.has(type)) {
             this.typeCallbacks.get(type).push(callback);
         }
         else {
             this.typeCallbacks.set(type, [callback]);
         }
-    }
-    unbind(type, callback) {
+    };
+    NamespaceCommunicator.prototype.unbind = function (type, callback) {
         if (this.typeCallbacks.has(type)) {
-            const callbacks = this.typeCallbacks.get(type);
-            for (let i = 0; i < callbacks.length; i++) {
-                const cb = callbacks[i];
+            var callbacks = this.typeCallbacks.get(type);
+            for (var i = 0; i < callbacks.length; i++) {
+                var cb = callbacks[i];
                 if (cb === callback) {
                     callbacks.splice(i, 1);
                     i--;
@@ -120,107 +123,112 @@ class NamespaceCommunicator {
                 this.typeCallbacks.delete(type);
             }
         }
-    }
-    ready() {
+    };
+    NamespaceCommunicator.prototype.ready = function () {
         return this.readyPromise;
-    }
-    getID() { return this.id; }
-    getChannelName() { return this.channelName; }
+    };
+    NamespaceCommunicator.prototype.getID = function () { return this.id; };
+    NamespaceCommunicator.prototype.getChannelName = function () { return this.channelName; };
     ;
-    getChannelID() { return this.channelID; }
+    NamespaceCommunicator.prototype.getChannelID = function () { return this.channelID; };
     ;
-    getShareDBNamespace() { return this.shareDBNamespace; }
+    NamespaceCommunicator.prototype.getShareDBNamespace = function () { return this.shareDBNamespace; };
     ;
-    getShareDBObject(path) {
-        return this.sdbp.then((connection) => {
-            return connection.get(this.getShareDBNamespace(), path);
+    NamespaceCommunicator.prototype.getShareDBObject = function (path) {
+        var _this = this;
+        return this.sdbp.then(function (connection) {
+            return connection.get(_this.getShareDBNamespace(), path);
         });
-    }
+    };
     ;
-    destroy() {
-    }
+    NamespaceCommunicator.prototype.destroy = function () {
+    };
     ;
-    trigger(channelName, eventName, eventContents, callback) {
+    NamespaceCommunicator.prototype.trigger = function (channelName, eventName, eventContents, callback) {
         if (callback) {
             this.emit(eventName, eventContents, callback);
         }
         else {
             this.emit(eventName, eventContents);
         }
-    }
+    };
     ;
-}
+    return NamespaceCommunicator;
+}());
 exports.NamespaceCommunicator = NamespaceCommunicator;
-class WebSocketCommunicationLayer {
-    constructor(authInfo) {
+var WebSocketCommunicationLayer = /** @class */ (function () {
+    function WebSocketCommunicationLayer(authInfo) {
+        var _this = this;
         this.authInfo = authInfo;
         this.namespaces = new Map();
         this.disconnectListeners = [];
         this.username = authInfo.username;
-        this.wsPromise = new Promise((resolve, reject) => {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            const ws = new WebSocket(`${wsProtocol}://${authInfo.host}`);
-            ws.addEventListener('open', (event) => {
+        this.wsPromise = new Promise(function (resolve, reject) {
+            var wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            var ws = new WebSocket(wsProtocol + "://" + authInfo.host);
+            ws.addEventListener('open', function (event) {
                 resolve(ws);
             });
-            ws.addEventListener('close', (event) => {
-                this.disconnectListeners.forEach((cb) => cb());
+            ws.addEventListener('close', function (event) {
+                _this.disconnectListeners.forEach(function (cb) { return cb(); });
             });
         });
-        this.mainSocket = this.wsPromise.then((ws) => {
-            return new NamespaceCommunicator(null, null, this.username, ws, this.shareDBConnectionPromise).ready();
+        this.mainSocket = this.wsPromise.then(function (ws) {
+            return new NamespaceCommunicator(null, null, _this.username, ws, _this.shareDBConnectionPromise).ready();
         });
-        this.shareDBConnectionPromise = this.wsPromise.then((ws) => {
-            const connection = new sharedb.Connection(ws);
+        this.shareDBConnectionPromise = this.wsPromise.then(function (ws) {
+            var connection = new sharedb.Connection(ws);
             // connection.debug = true;
             return connection;
         });
     }
-    onDisconnect(callback) {
+    WebSocketCommunicationLayer.prototype.onDisconnect = function (callback) {
         this.disconnectListeners.push(callback);
         return this;
-    }
-    getShareDBConnection() {
+    };
+    WebSocketCommunicationLayer.prototype.getShareDBConnection = function () {
         return this.shareDBConnectionPromise;
-    }
-    getNamespace(channelName, channelID) {
+    };
+    WebSocketCommunicationLayer.prototype.getNamespace = function (channelName, channelID) {
+        var _this = this;
         if (this.namespaces.has(channelName)) {
             return this.namespaces.get(channelName);
         }
         else {
-            const namespacePromise = this.wsPromise.then((ws) => {
-                return new NamespaceCommunicator(channelName, channelID, this.username, ws, this.shareDBConnectionPromise).ready();
+            var namespacePromise = this.wsPromise.then(function (ws) {
+                return new NamespaceCommunicator(channelName, channelID, _this.username, ws, _this.shareDBConnectionPromise).ready();
             });
             this.namespaces.set(channelName, namespacePromise);
             return namespacePromise;
         }
-    }
-    getMembers(channelName) {
-        return this.getNamespace(channelName).then((room) => {
-            return new Promise((resolve, reject) => {
-                room.emit('get-members', (memberInfo) => {
+    };
+    WebSocketCommunicationLayer.prototype.getMembers = function (channelName) {
+        return this.getNamespace(channelName).then(function (room) {
+            return new Promise(function (resolve, reject) {
+                room.emit('get-members', function (memberInfo) {
                     resolve(memberInfo);
                 });
             });
         });
-    }
+    };
     ;
-    channelNameAvailable(channelName) {
-        return this.mainSocket.then((socket) => {
-            return new Promise((resolve, reject) => {
-                socket.emit('channel-available', channelName, (available) => {
+    WebSocketCommunicationLayer.prototype.channelNameAvailable = function (channelName) {
+        return this.mainSocket.then(function (socket) {
+            return new Promise(function (resolve, reject) {
+                socket.emit('channel-available', channelName, function (available) {
                     resolve(available);
                 });
             });
         });
-    }
+    };
     ;
-    destroy() {
+    WebSocketCommunicationLayer.prototype.destroy = function () {
         // this.manager.then((manager) => {
         // });
-    }
+    };
     ;
-}
+    return WebSocketCommunicationLayer;
+}());
 exports.WebSocketCommunicationLayer = WebSocketCommunicationLayer;
 function guid() {
     function s4() {

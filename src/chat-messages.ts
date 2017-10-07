@@ -2,30 +2,19 @@ import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
 import { EditorStateTracker, EditorState } from './editor-state-tracker';
 import { ChannelCommunicationService } from './communication-service';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'typed-event-emitter';
 import * as showdown from 'showdown';
 import * as difflib from 'difflib';
 import * as ShareDB from 'sharedb/lib/client';
 
 function tstamp(x:number|Timestamped):number {
-	if(typeof(x) === typeof(1)) {
-		return (x as number);
-	} else {
-		return (x as Timestamped).getTimestamp();
-	}
+	if(typeof(x) === typeof(1)) { return (x as number); }
+	else { return (x as Timestamped).getTimestamp(); }
 }
-function before(a:number|Timestamped, b:number|Timestamped):boolean {
-	return tstamp(a) < tstamp(b);
-}
-function after(a:number|Timestamped, b:number|Timestamped):boolean {
-	return tstamp(a) > tstamp(b);
-}
-function beforeEQ(a:number|Timestamped, b:number|Timestamped):boolean {
-	return tstamp(a) <= tstamp(b);
-}
-function afterEQ(a:number|Timestamped, b:number|Timestamped):boolean {
-	return tstamp(a) >= tstamp(b);
-}
+function before(a:number|Timestamped, b:number|Timestamped):boolean { return tstamp(a) < tstamp(b); }
+function after(a:number|Timestamped, b:number|Timestamped):boolean { return tstamp(a) > tstamp(b); }
+function beforeEQ(a:number|Timestamped, b:number|Timestamped):boolean { return tstamp(a) <= tstamp(b); }
+function afterEQ(a:number|Timestamped, b:number|Timestamped):boolean { return tstamp(a) >= tstamp(b); }
 
 function reverseArr(input) {
     var ret = new Array;

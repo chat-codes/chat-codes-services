@@ -1,9 +1,19 @@
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-const _ = require("underscore");
-const events_1 = require("events");
-const showdown = require("showdown");
-const difflib = require("difflib");
+var _ = require("underscore");
+var typed_event_emitter_1 = require("typed-event-emitter");
+var showdown = require("showdown");
+var difflib = require("difflib");
 function tstamp(x) {
     if (typeof (x) === typeof (1)) {
         return x;
@@ -12,18 +22,10 @@ function tstamp(x) {
         return x.getTimestamp();
     }
 }
-function before(a, b) {
-    return tstamp(a) < tstamp(b);
-}
-function after(a, b) {
-    return tstamp(a) > tstamp(b);
-}
-function beforeEQ(a, b) {
-    return tstamp(a) <= tstamp(b);
-}
-function afterEQ(a, b) {
-    return tstamp(a) >= tstamp(b);
-}
+function before(a, b) { return tstamp(a) < tstamp(b); }
+function after(a, b) { return tstamp(a) > tstamp(b); }
+function beforeEQ(a, b) { return tstamp(a) <= tstamp(b); }
+function afterEQ(a, b) { return tstamp(a) >= tstamp(b); }
 function reverseArr(input) {
     var ret = new Array;
     for (var i = input.length - 1; i >= 0; i--) {
@@ -37,51 +39,54 @@ var ConnectionAction;
     ConnectionAction[ConnectionAction["disconnect"] = 2] = "disconnect";
 })(ConnectionAction || (ConnectionAction = {}));
 ;
-class ConnectionMessage {
-    constructor(user, timestamp, action) {
+var ConnectionMessage = /** @class */ (function () {
+    function ConnectionMessage(user, timestamp, action) {
         this.user = user;
         this.timestamp = timestamp;
         this.action = action;
     }
-    getUser() { return this.user; }
+    ConnectionMessage.prototype.getUser = function () { return this.user; };
     ;
-    getTimestamp() { return this.timestamp; }
+    ConnectionMessage.prototype.getTimestamp = function () { return this.timestamp; };
     ;
-    isConnect() { return this.action === ConnectionAction.connect; }
-    isDisconnect() { return this.action !== ConnectionAction.connect; }
-}
+    ConnectionMessage.prototype.isConnect = function () { return this.action === ConnectionAction.connect; };
+    ConnectionMessage.prototype.isDisconnect = function () { return this.action !== ConnectionAction.connect; };
+    return ConnectionMessage;
+}());
 exports.ConnectionMessage = ConnectionMessage;
-class EditMessage {
-    constructor(users, editors, timestamp, contents) {
+var EditMessage = /** @class */ (function () {
+    function EditMessage(users, editors, timestamp, contents) {
         this.users = users;
         this.editors = editors;
         this.timestamp = timestamp;
         this.contents = contents;
     }
-    getUsers() { return this.users; }
+    EditMessage.prototype.getUsers = function () { return this.users; };
     ;
-    getEditors() { return this.editors; }
+    EditMessage.prototype.getEditors = function () { return this.editors; };
     ;
-    getTimestamp() { return this.timestamp; }
+    EditMessage.prototype.getTimestamp = function () { return this.timestamp; };
     ;
-    getContents() { return this.contents; }
+    EditMessage.prototype.getContents = function () { return this.contents; };
     ;
-}
+    return EditMessage;
+}());
 exports.EditMessage = EditMessage;
-class TextMessage {
-    constructor(sender, timestamp, message, editorsVersion, editorStateTracker) {
+var TextMessage = /** @class */ (function () {
+    function TextMessage(sender, timestamp, message, editorsVersion, editorStateTracker) {
+        var _this = this;
         this.sender = sender;
         this.timestamp = timestamp;
         this.message = message;
         this.editorsVersion = editorsVersion;
         this.converter = new showdown.Converter({ simplifiedAutoLink: true });
         this.fileLinkRegexp = new RegExp('^(.+):\s*L(\\d+)(\\s*,\\s*(\\d+))?(\s*-\s*L(\\d+)(\\s*,\\s*(\\d+))?)?$');
-        const htmlBuilder = document.createElement('li');
+        var htmlBuilder = document.createElement('li');
         htmlBuilder.innerHTML = this.converter.makeHtml(this.message);
-        _.each(htmlBuilder.querySelectorAll('a'), (a) => {
-            const fileLinkInfo = this.matchFileLinkAttributes(a.getAttribute('href'));
+        _.each(htmlBuilder.querySelectorAll('a'), function (a) {
+            var fileLinkInfo = _this.matchFileLinkAttributes(a.getAttribute('href'));
             if (fileLinkInfo) {
-                const { fileName, start, end } = fileLinkInfo;
+                var fileName = fileLinkInfo.fileName, start = fileLinkInfo.start, end = fileLinkInfo.end;
                 if (isNaN(start.column)) {
                     start.column = -1;
                 }
@@ -91,8 +96,8 @@ class TextMessage {
                 if (isNaN(end.column)) {
                     end.column = -1;
                 }
-                const editorState = editorStateTracker.fuzzyMatch(fileName);
-                const fileID = editorState ? editorState.getEditorID() : fileName;
+                var editorState = editorStateTracker.fuzzyMatch(fileName);
+                var fileID = editorState ? editorState.getEditorID() : fileName;
                 a.setAttribute('href', 'javascript:void(0)');
                 a.setAttribute('class', 'line_ref');
                 a.setAttribute('data-file', fileID);
@@ -102,18 +107,18 @@ class TextMessage {
         });
         this.html = htmlBuilder.innerHTML;
     }
-    getSender() { return this.sender; }
+    TextMessage.prototype.getSender = function () { return this.sender; };
     ;
-    getTimestamp() { return this.timestamp; }
+    TextMessage.prototype.getTimestamp = function () { return this.timestamp; };
     ;
-    getMessage() { return this.message; }
+    TextMessage.prototype.getMessage = function () { return this.message; };
     ;
-    getHTML() { return this.html; }
+    TextMessage.prototype.getHTML = function () { return this.html; };
     ;
-    getEditorVersion() { return this.editorsVersion; }
+    TextMessage.prototype.getEditorVersion = function () { return this.editorsVersion; };
     ;
-    matchFileLinkAttributes(str) {
-        const match = str.match(this.fileLinkRegexp);
+    TextMessage.prototype.matchFileLinkAttributes = function (str) {
+        var match = str.match(this.fileLinkRegexp);
         if (match) {
             return {
                 fileName: match[1],
@@ -130,101 +135,104 @@ class TextMessage {
         else {
             return false;
         }
-    }
+    };
     ;
-}
+    return TextMessage;
+}());
 exports.TextMessage = TextMessage;
-class Group extends events_1.EventEmitter {
-    constructor(items) {
-        super();
-        this.items = [];
-        items.forEach((item) => {
-            this.doAddItem(item);
+var Group = /** @class */ (function (_super) {
+    __extends(Group, _super);
+    function Group(items) {
+        var _this = _super.call(this) || this;
+        _this.items = [];
+        items.forEach(function (item) {
+            _this.doAddItem(item);
         });
+        return _this;
     }
     ;
-    getItems() { return this.items; }
-    getEarliestItem() { return _.first(this.getItems()); }
-    getLatestItem() { return _.last(this.getItems()); }
-    getEarliestTimestamp() { return this.getEarliestItem().getTimestamp(); }
-    getLatestTimestamp() { return this.getLatestItem().getTimestamp(); }
-    includesTimestamp(timestamp) {
+    Group.prototype.getItems = function () { return this.items; };
+    Group.prototype.getEarliestItem = function () { return _.first(this.getItems()); };
+    Group.prototype.getLatestItem = function () { return _.last(this.getItems()); };
+    Group.prototype.getEarliestTimestamp = function () { return this.getEarliestItem().getTimestamp(); };
+    Group.prototype.getLatestTimestamp = function () { return this.getLatestItem().getTimestamp(); };
+    Group.prototype.includesTimestamp = function (timestamp) {
         return afterEQ(timestamp, this.getEarliestTimestamp()) && beforeEQ(timestamp, this.getLatestTimestamp());
-    }
+    };
     ;
-    occuredBefore(item) {
+    Group.prototype.occuredBefore = function (item) {
         return before(this.getLatestTimestamp(), item);
-    }
+    };
     ;
-    occuredBeforeEQ(item) {
+    Group.prototype.occuredBeforeEQ = function (item) {
         return beforeEQ(this.getLatestTimestamp(), item);
-    }
+    };
     ;
-    occuredAfter(item) {
+    Group.prototype.occuredAfter = function (item) {
         return after(this.getLatestTimestamp(), item);
-    }
+    };
     ;
-    occuredAfterEQ(item) {
+    Group.prototype.occuredAfterEQ = function (item) {
         return afterEQ(this.getLatestTimestamp(), item);
-    }
+    };
     ;
-    getInsertionIndex(timestamp) {
-        const items = this.getItems();
-        let i = items.length - 1;
+    Group.prototype.getInsertionIndex = function (timestamp) {
+        var items = this.getItems();
+        var i = items.length - 1;
         for (; i >= 0; i--) {
             if (before(this.items[i], timestamp)) {
                 return i + 1;
             }
         }
         return i;
-    }
-    split(timestamp) {
-        const index = this.getInsertionIndex(timestamp);
-        const beforeIndex = this.constructNew(this.items.slice(0, index));
-        const afterIndex = this.constructNew(this.items.slice(index));
+    };
+    Group.prototype.split = function (timestamp) {
+        var index = this.getInsertionIndex(timestamp);
+        var beforeIndex = this.constructNew(this.items.slice(0, index));
+        var afterIndex = this.constructNew(this.items.slice(index));
         return [beforeIndex, afterIndex];
-    }
+    };
     ;
-    doAddItem(item) {
-        const insertionIndex = this.getInsertionIndex(item.getTimestamp());
+    Group.prototype.doAddItem = function (item) {
+        var insertionIndex = this.getInsertionIndex(item.getTimestamp());
         this.items.splice(insertionIndex, 0, item);
         return {
             insertionIndex: insertionIndex,
             item: item
         };
-    }
+    };
     ;
-    addItem(titem) {
+    Group.prototype.addItem = function (titem) {
         this.emit('item-will-be-added', {
             group: this,
             item: titem
         });
-        const { insertionIndex, item } = this.doAddItem(titem);
+        var _a = this.doAddItem(titem), insertionIndex = _a.insertionIndex, item = _a.item;
         this.emit('item-added', {
             group: this,
             item: titem,
             insertionIndex: insertionIndex
         });
         return insertionIndex;
-    }
+    };
     ;
-    compatibleWith(item) {
+    Group.prototype.compatibleWith = function (item) {
         return true;
-    }
+    };
     ;
-    constructNew(items) {
+    Group.prototype.constructNew = function (items) {
         return new Group(items);
-    }
+    };
     ;
-    clearItems() {
-        for (let i = 0; i < this.items.length; i++) {
+    Group.prototype.clearItems = function () {
+        for (var i = 0; i < this.items.length; i++) {
             this.removeItem(i);
             i--;
         }
-    }
+    };
     ;
-    removeItem(i) {
-        const item = this.items[i];
+    Group.prototype.removeItem = function (i) {
+        var item = this.items[i];
         this.emit('item-will-be-removed', {
             group: this,
             item: item
@@ -234,28 +242,33 @@ class Group extends events_1.EventEmitter {
             group: this,
             item: item
         });
+    };
+    return Group;
+}(typed_event_emitter_1.EventEmitter));
+var EditGroup = /** @class */ (function (_super) {
+    __extends(EditGroup, _super);
+    function EditGroup() {
+        return _super !== null && _super.apply(this, arguments) || this;
     }
-}
-class EditGroup extends Group {
-    getDiffSummary() {
-        const contentMap = new Map();
-        this.getItems().forEach((em) => {
-            const contents = em.getContents();
-            _.each(contents, (info, editorID) => {
+    EditGroup.prototype.getDiffSummary = function () {
+        var contentMap = new Map();
+        this.getItems().forEach(function (em) {
+            var contents = em.getContents();
+            _.each(contents, function (info, editorID) {
                 contentMap.set(editorID, info);
             });
         });
-        const editors = this.getEditorStates();
-        const editorMap = new Map();
-        editors.forEach((ed) => {
+        var editors = this.getEditorStates();
+        var editorMap = new Map();
+        editors.forEach(function (ed) {
             editorMap.set(ed.getEditorID(), ed);
         });
-        const diffs = [];
-        contentMap.forEach((info, editorID) => {
-            const editorState = editorMap.get(editorID);
-            const editorTitle = editorState.getTitle();
-            const { valueBefore, valueAfter } = info;
-            let diff = difflib.unifiedDiff(valueBefore.split('\n'), valueAfter.split('\n'), { fromfile: editorTitle, tofile: editorTitle });
+        var diffs = [];
+        contentMap.forEach(function (info, editorID) {
+            var editorState = editorMap.get(editorID);
+            var editorTitle = editorState.getTitle();
+            var valueBefore = info.valueBefore, valueAfter = info.valueAfter;
+            var diff = difflib.unifiedDiff(valueBefore.split('\n'), valueAfter.split('\n'), { fromfile: editorTitle, tofile: editorTitle });
             if (diff.length > 0) {
                 diff[0] = diff[0].trim();
             }
@@ -271,156 +284,171 @@ class EditGroup extends Group {
             });
         });
         return diffs;
-    }
+    };
     ;
-    getEditorStates() {
-        const editorStates = _.chain(this.getItems())
-            .map(delta => delta.getEditors())
+    EditGroup.prototype.getEditorStates = function () {
+        var editorStates = _.chain(this.getItems())
+            .map(function (delta) { return delta.getEditors(); })
             .flatten()
             .compact()
             .unique()
             .value();
         return editorStates;
-    }
-    getAuthors() {
-        const authors = _.chain(this.getItems())
-            .map(delta => delta.getUsers())
+    };
+    EditGroup.prototype.getAuthors = function () {
+        var authors = _.chain(this.getItems())
+            .map(function (delta) { return delta.getUsers(); })
             .flatten()
             .compact()
             .unique()
             .value();
         return authors;
-    }
-    compatibleWith(item) {
+    };
+    EditGroup.prototype.compatibleWith = function (item) {
         return item instanceof EditMessage;
-    }
+    };
     ;
-    constructNew(items) {
+    EditGroup.prototype.constructNew = function (items) {
         return new EditGroup(items);
-    }
+    };
     ;
-}
+    return EditGroup;
+}(Group));
 exports.EditGroup = EditGroup;
 /*
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
  */
-class TextMessageGroup extends Group {
-    getSender() { return this.getEarliestItem().getSender(); }
-    compatibleWith(item) {
+var TextMessageGroup = /** @class */ (function (_super) {
+    __extends(TextMessageGroup, _super);
+    function TextMessageGroup() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    TextMessageGroup.prototype.getSender = function () { return this.getEarliestItem().getSender(); };
+    TextMessageGroup.prototype.compatibleWith = function (item) {
         return item instanceof TextMessage && item.getSender() === this.getSender();
-    }
+    };
     ;
-    constructNew(items) {
+    TextMessageGroup.prototype.constructNew = function (items) {
         return new TextMessageGroup(items);
-    }
+    };
     ;
-    getEditorVersion() {
+    TextMessageGroup.prototype.getEditorVersion = function () {
         return this.getLatestItem().getEditorVersion();
-    }
+    };
     ;
-}
+    return TextMessageGroup;
+}(Group));
 exports.TextMessageGroup = TextMessageGroup;
 ;
-class ConnectionMessageGroup extends Group {
-    isConnect() { return this.getEarliestItem().isConnect(); }
-    isDisconnect() { return this.getEarliestItem().isDisconnect(); }
-    compatibleWith(item) {
+var ConnectionMessageGroup = /** @class */ (function (_super) {
+    __extends(ConnectionMessageGroup, _super);
+    function ConnectionMessageGroup() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    ConnectionMessageGroup.prototype.isConnect = function () { return this.getEarliestItem().isConnect(); };
+    ConnectionMessageGroup.prototype.isDisconnect = function () { return this.getEarliestItem().isDisconnect(); };
+    ConnectionMessageGroup.prototype.compatibleWith = function (item) {
         return (item instanceof ConnectionMessage) && ((this.isConnect() && item.isConnect()) || (this.isDisconnect() && item.isDisconnect()));
-    }
+    };
     ;
-    constructNew(items) {
+    ConnectionMessageGroup.prototype.constructNew = function (items) {
         return new ConnectionMessageGroup(items);
-    }
+    };
     ;
-    getUsers() {
-        const users = this.getItems().map(cm => cm.getUser());
+    ConnectionMessageGroup.prototype.getUsers = function () {
+        var users = this.getItems().map(function (cm) { return cm.getUser(); });
         return _.unique(users);
-    }
-}
+    };
+    return ConnectionMessageGroup;
+}(Group));
 exports.ConnectionMessageGroup = ConnectionMessageGroup;
 ;
 /*
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
-class MessageGroups extends events_1.EventEmitter {
-    constructor(channelService, chatUserList, editorStateTracker) {
-        super();
-        this.channelService = channelService;
-        this.chatUserList = chatUserList;
-        this.editorStateTracker = editorStateTracker;
-        this.messageGroupingTimeThreshold = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
-        this.messageGroups = [];
-        this.chatDocPromise = this.channelService.getShareDBChat();
-        this.ready = Promise.all([this.chatDocPromise, this.chatUserList.ready, editorStateTracker.ready]).then((info) => {
-            const doc = info[0];
-            doc.data['messages'].forEach((li) => {
-                this.addFromSerializedMessage(li);
+var MessageGroups = /** @class */ (function (_super) {
+    __extends(MessageGroups, _super);
+    function MessageGroups(channelService, chatUserList, editorStateTracker) {
+        var _this = _super.call(this) || this;
+        _this.channelService = channelService;
+        _this.chatUserList = chatUserList;
+        _this.editorStateTracker = editorStateTracker;
+        _this.messageGroupingTimeThreshold = 5 * 60 * 1000; // The delay between when messages should be in separate groups (5 minutes)
+        _this.messageGroups = [];
+        _this.chatDocPromise = _this.channelService.getShareDBChat();
+        _this.ready = Promise.all([_this.chatDocPromise, _this.chatUserList.ready, editorStateTracker.ready]).then(function (info) {
+            var doc = info[0];
+            doc.data['messages'].forEach(function (li) {
+                _this.addFromSerializedMessage(li);
             });
-            doc.on('op', (ops, source) => {
-                ops.forEach((op) => {
-                    const { p, li, ld } = op;
-                    const [field] = p;
+            doc.on('op', function (ops, source) {
+                ops.forEach(function (op) {
+                    var p = op.p, li = op.li, ld = op.ld;
+                    var field = p[0];
                     if (field === 'messages') {
-                        const messageGroups = this.getMessageGroups();
-                        const lastMessageGroup = _.last(messageGroups);
+                        var messageGroups = _this.getMessageGroups();
+                        var lastMessageGroup = _.last(messageGroups);
                         if (ld && !_.isEmpty(ld) && lastMessageGroup instanceof EditGroup) {
-                            lastMessageGroup.addItem(this.createMessage(li));
+                            lastMessageGroup.addItem(_this.createMessage(li));
                             lastMessageGroup.removeItem(0);
                         }
                         else if (li) {
-                            this.addFromSerializedMessage(li);
+                            _this.addFromSerializedMessage(li);
                         }
                     }
                 });
             });
         });
+        return _this;
     }
     ;
-    createMessage(li) {
+    MessageGroups.prototype.createMessage = function (li) {
+        var _this = this;
         if (!_.has(li, 'type')) {
             return null;
         }
-        const { type } = li;
+        var type = li.type;
         if (type === 'text') {
-            const sender = this.chatUserList.getUser(li.uid);
+            var sender = this.chatUserList.getUser(li.uid);
             return new TextMessage(sender, li.timestamp, li.message, li.editorsVersion, this.editorStateTracker);
         }
         else if (type === 'join') {
-            const user = this.chatUserList.getUser(li.uid);
+            var user = this.chatUserList.getUser(li.uid);
             return new ConnectionMessage(user, li.timestamp, ConnectionAction.connect);
         }
         else if (type === 'left') {
-            const user = this.chatUserList.getUser(li.uid);
+            var user = this.chatUserList.getUser(li.uid);
             return new ConnectionMessage(user, li.timestamp, ConnectionAction.disconnect);
         }
         else if (type === 'edit') {
-            const users = li.users.map((uid) => this.chatUserList.getUser(uid));
-            const editors = li.files.map((eid) => this.editorStateTracker.getEditorState(eid));
+            var users = li.users.map(function (uid) { return _this.chatUserList.getUser(uid); });
+            var editors = li.files.map(function (eid) { return _this.editorStateTracker.getEditorState(eid); });
             return new EditMessage(users, editors, li.endTimestamp, li.fileContents);
         }
         else {
             console.error(type);
             return null;
         }
-    }
-    addFromSerializedMessage(li) {
-        const message = this.createMessage(li);
+    };
+    MessageGroups.prototype.addFromSerializedMessage = function (li) {
+        var message = this.createMessage(li);
         if (message) {
             return this.addItem(message);
         }
-    }
-    typeMatches(item, group) {
+    };
+    MessageGroups.prototype.typeMatches = function (item, group) {
         return (group instanceof EditGroup && item instanceof EditMessage) ||
             (group instanceof TextMessageGroup && item instanceof TextMessage) ||
             (group instanceof ConnectionMessageGroup && item instanceof ConnectionMessage);
-    }
-    addItem(item) {
-        const itemTimestamp = item.getTimestamp();
-        let insertedIntoExistingGroup = false;
-        let i = this.messageGroups.length - 1;
+    };
+    MessageGroups.prototype.addItem = function (item) {
+        var _this = this;
+        var itemTimestamp = item.getTimestamp();
+        var insertedIntoExistingGroup = false;
+        var i = this.messageGroups.length - 1;
         for (; i >= 0; i--) {
-            const messageGroup = this.messageGroups[i];
+            var messageGroup = this.messageGroups[i];
             if (messageGroup.includesTimestamp(itemTimestamp)) {
                 if (messageGroup.compatibleWith(item)) {
                     messageGroup.addItem(item);
@@ -437,9 +465,9 @@ class MessageGroups extends events_1.EventEmitter {
                         messageGroup: messageGroup,
                         insertionIndex: i
                     });
-                    const splitGroup = messageGroup.split(itemTimestamp);
-                    splitGroup.forEach((mg, j) => {
-                        this.addGroup(mg, i + j);
+                    var splitGroup = messageGroup.split(itemTimestamp);
+                    splitGroup.forEach(function (mg, j) {
+                        _this.addGroup(mg, i + j);
                     });
                     i += splitGroup.length; // on the next loop, will be at the later split
                     continue;
@@ -454,8 +482,8 @@ class MessageGroups extends events_1.EventEmitter {
             }
         }
         if (!insertedIntoExistingGroup) {
-            const insertionIndex = i + 1;
-            let group;
+            var insertionIndex = i + 1;
+            var group = void 0;
             if (item instanceof TextMessage) {
                 group = new TextMessageGroup([item]);
             }
@@ -467,8 +495,9 @@ class MessageGroups extends events_1.EventEmitter {
             }
             this.addGroup(group, insertionIndex);
         }
-    }
-    addGroup(group, insertionIndex) {
+    };
+    MessageGroups.prototype.addGroup = function (group, insertionIndex) {
+        var _this = this;
         this.emit('group-will-be-added', {
             messageGroup: group,
             insertionIndex: insertionIndex
@@ -478,27 +507,28 @@ class MessageGroups extends events_1.EventEmitter {
             messageGroup: group,
             insertionIndex: insertionIndex
         });
-        group.on('item-will-be-added', (event) => {
-            this.emit('item-will-be-added', event);
+        group.on('item-will-be-added', function (event) {
+            _this.emit('item-will-be-added', event);
         });
-        group.on('item-added', (event) => {
-            this.emit('item-added', event);
+        group.on('item-added', function (event) {
+            _this.emit('item-added', event);
         });
-        group.on('item-will-be-removed', (event) => {
-            this.emit('item-will-be-removed', event);
+        group.on('item-will-be-removed', function (event) {
+            _this.emit('item-will-be-removed', event);
         });
-        group.on('item-removed', (event) => {
-            this.emit('item-removed', event);
+        group.on('item-removed', function (event) {
+            _this.emit('item-removed', event);
         });
-    }
-    getMessageGroups() { return this.messageGroups; }
+    };
+    MessageGroups.prototype.getMessageGroups = function () { return this.messageGroups; };
     /**
      * Returns true if there are no messages and false otherwise
      * @return {boolean} If there are no messages
      */
-    isEmpty() {
+    MessageGroups.prototype.isEmpty = function () {
         return this.messageGroups.length === 0;
-    }
-}
+    };
+    return MessageGroups;
+}(typed_event_emitter_1.EventEmitter));
 exports.MessageGroups = MessageGroups;
 //# sourceMappingURL=chat-messages.js.map

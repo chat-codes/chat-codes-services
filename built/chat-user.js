@@ -1,11 +1,22 @@
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-const _ = require("underscore");
-const events_1 = require("events");
+var _ = require("underscore");
+var typed_event_emitter_1 = require("typed-event-emitter");
 /*
  * Represents a single chat user
  */
-class ChatUser extends events_1.EventEmitter {
+var ChatUser = /** @class */ (function (_super) {
+    __extends(ChatUser, _super);
     /**
      * constructor
      * @param  {boolean} isMe       Whether the user is me or not
@@ -14,112 +25,102 @@ class ChatUser extends events_1.EventEmitter {
      * @param  {boolean} active     Whether this user is currently in the channel
      * @param  {number}  colorIndex The user's color
      */
-    constructor(isMe, id, name, joined, left, colorIndex, channelService) {
-        super();
-        this.isMe = isMe;
-        this.id = id;
-        this.name = name;
-        this.joined = joined;
-        this.left = left;
-        this.colorIndex = colorIndex;
-        this.channelService = channelService;
-        this.typingStatus = 'IDLE';
-        this.chatDocPromise = this.channelService.getShareDBChat();
+    function ChatUser(isMe, id, name, joined, left, colorIndex, channelService) {
+        var _this = _super.call(this) || this;
+        _this.isMe = isMe;
+        _this.id = id;
+        _this.name = name;
+        _this.joined = joined;
+        _this.left = left;
+        _this.colorIndex = colorIndex;
+        _this.channelService = channelService;
+        _this.typingStatus = 'IDLE';
+        _this.chatDocPromise = _this.channelService.getShareDBChat();
+        return _this;
     }
-    getIsMe() { return this.isMe; }
+    ChatUser.prototype.getIsMe = function () { return this.isMe; };
     ;
-    // public isActive():boolean { return this.active; };
-    getID() { return this.id; }
-    getName() { return this.name; }
-    getColorIndex() { return this.colorIndex; }
+    ChatUser.prototype.getID = function () { return this.id; };
+    ChatUser.prototype.getName = function () { return this.name; };
+    ChatUser.prototype.getColorIndex = function () { return this.colorIndex; };
     ;
-    // public setIsActive(active:boolean):void { this.active = active; };
-    getTypingStatus() { return this.typingStatus; }
+    ChatUser.prototype.getTypingStatus = function () { return this.typingStatus; };
     ;
-    setLeft(ts) { this.left = ts; }
+    ChatUser.prototype.setLeft = function (ts) { this.left = ts; };
     ;
-    getLeft() { return this.left; }
+    ChatUser.prototype.getLeft = function () { return this.left; };
     ;
-    getJoined() { return this.joined; }
+    ChatUser.prototype.getJoined = function () { return this.joined; };
     ;
-    setTypingStatus(status) {
+    ChatUser.prototype.setTypingStatus = function (status) {
         this.typingStatus = status;
         this.emit('typingStatus', {
             status: status
         });
-    }
-    serialize() {
-        return {
-            id: this.id,
-            name: this.name,
-            typingStatus: this.typingStatus
-            // active: this.active
-        };
-    }
-}
+    };
+    return ChatUser;
+}(typed_event_emitter_1.EventEmitter));
 exports.ChatUser = ChatUser;
-class ChatUserList extends events_1.EventEmitter {
-    constructor(myIDPromise, channelService) {
-        super();
-        this.myIDPromise = myIDPromise;
-        this.channelService = channelService;
-        this.activeUsers = new Map();
-        this.allUsers = new Map();
-        this.chatDocPromise = this.channelService.getShareDBChat();
-        this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
-            // const [doc, myID] = info;
-            const doc = info[0];
-            const myID = info[1];
-            // const [doc:sharedb.Doc, myID:string] = info;
-            // console.log(doc);
-            _.each(doc.data.allUsers, (oi) => {
-                this.allUsers.set(oi.id, this.createUser(oi, myID));
+var ChatUserList = /** @class */ (function (_super) {
+    __extends(ChatUserList, _super);
+    function ChatUserList(myIDPromise, channelService) {
+        var _this = _super.call(this) || this;
+        _this.myIDPromise = myIDPromise;
+        _this.channelService = channelService;
+        _this.activeUsers = new Map();
+        _this.allUsers = new Map();
+        _this.chatDocPromise = _this.channelService.getShareDBChat();
+        _this.ready = Promise.all([_this.chatDocPromise, _this.myIDPromise]).then(function (info) {
+            var doc = info[0];
+            var myID = info[1];
+            _.each(doc.data.allUsers, function (oi) {
+                _this.allUsers.set(oi.id, _this.createUser(oi, myID));
             });
-            _.each(doc.data.activeUsers, (oi) => {
-                this.activeUsers.set(oi.id, this.createUser(oi, myID));
+            _.each(doc.data.activeUsers, function (oi) {
+                _this.activeUsers.set(oi.id, _this.createUser(oi, myID));
             });
-            doc.on('op', (ops, source) => {
-                ops.forEach((op) => {
-                    const { p } = op;
-                    const [field] = p;
+            doc.on('op', function (ops, source) {
+                ops.forEach(function (op) {
+                    var p = op.p;
+                    var field = p[0];
                     if ((field === 'activeUsers' || field === 'allUsers') && (p.length === 2)) {
-                        const userMap = field === 'activeUsers' ? this.activeUsers : this.allUsers;
+                        var userMap = field === 'activeUsers' ? _this.activeUsers : _this.allUsers;
                         if (_.has(op, 'od') && _.has(op, 'oi')) {
-                            const { od, oi } = op;
+                            var od = op.od, oi = op.oi;
                             if (od.id !== oi.id) {
-                                const addedUser = this.createUser(oi, myID);
+                                var addedUser = _this.createUser(oi, myID);
                                 userMap.delete(od.id);
-                                this.emit('userRemoved', {
+                                _this.emit('userRemoved', {
                                     id: od.id
                                 });
                                 userMap.set(oi.id, addedUser);
-                                this.emit('userAdded', {
+                                _this.emit('userAdded', {
                                     user: addedUser
                                 });
                             }
                         }
                         else if (_.has(op, 'od')) {
-                            const { od } = op;
-                            const { id } = od;
+                            var od = op.od;
+                            var id = od.id;
                             userMap.delete(id);
-                            this.emit('userRemoved', {
+                            _this.emit('userRemoved', {
                                 id: id
                             });
                         }
                         else if (_.has(op, 'oi')) {
-                            const { oi } = op;
-                            const addedUser = this.createUser(oi, myID);
+                            var oi = op.oi;
+                            var addedUser = _this.createUser(oi, myID);
                             userMap.set(oi.id, addedUser);
-                            this.emit('userAdded', {
+                            _this.emit('userAdded', {
                                 user: addedUser
                             });
                         }
                     }
                     else if (_.last(p) === 'typingStatus') {
                         if (_.has(op, 'oi')) {
-                            const { oi } = op;
-                            const uid = p[1];
-                            const user = this.getUser(uid);
+                            var oi = op.oi;
+                            var uid = p[1];
+                            var user = _this.getUser(uid);
                             user.setTypingStatus(oi);
                         }
                     }
@@ -128,42 +129,43 @@ class ChatUserList extends events_1.EventEmitter {
                     }
                 });
             });
-        }).then(() => {
+        }).then(function () {
             return true;
         });
+        return _this;
     }
-    createUser(userInfo, myID) {
-        const { id, joined, left, info } = userInfo;
+    ChatUserList.prototype.createUser = function (userInfo, myID) {
+        var id = userInfo.id, joined = userInfo.joined, left = userInfo.left, info = userInfo.info;
         if (this.allUsers.has(id)) {
-            const user = this.allUsers.get(id);
+            var user = this.allUsers.get(id);
             return user;
         }
         else {
-            const { name, colorIndex } = info;
-            const isMe = (id === myID);
-            const user = new ChatUser(isMe, id, name, joined, left, colorIndex, this.channelService);
+            var name_1 = info.name, colorIndex = info.colorIndex;
+            var isMe = (id === myID);
+            var user = new ChatUser(isMe, id, name_1, joined, left, colorIndex, this.channelService);
             this.allUsers.set(id, user);
             return user;
         }
-    }
+    };
     ;
-    getUser(id) {
+    ChatUserList.prototype.getUser = function (id) {
         return this.allUsers.get(id);
-    }
-    getMe() {
-        const activeUsers = this.getActiveUsers();
-        for (let i = 0; i < activeUsers.length; i++) {
-            let user = activeUsers[i];
+    };
+    ChatUserList.prototype.getMe = function () {
+        var activeUsers = this.getActiveUsers();
+        for (var i = 0; i < activeUsers.length; i++) {
+            var user = activeUsers[i];
             if (user.getIsMe()) {
                 return user;
             }
         }
         return null;
-    }
-    getActiveUsers() {
-        // return [];
+    };
+    ChatUserList.prototype.getActiveUsers = function () {
         return Array.from(this.activeUsers.values());
-    }
-}
+    };
+    return ChatUserList;
+}(typed_event_emitter_1.EventEmitter));
 exports.ChatUserList = ChatUserList;
 //# sourceMappingURL=chat-user.js.map

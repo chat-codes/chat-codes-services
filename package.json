@@ -4,12 +4,14 @@
     "description": "",
     "dependencies": {
         "@types/underscore": "^1.8.2",
+        "@types/wolfy87-eventemitter": "^4.2.32",
         "difflib": "^0.2.4",
         "fuzzyset.js": "0.0.4",
         "ot-text": "^1.0.1",
         "sharedb": "^1.0.0-beta.7",
         "sharedb-mongo": "^1.0.0-beta.4",
         "showdown": "^1.7.3",
+        "typed-event-emitter": "^1.0.3",
         "underscore": "^1.8.3"
     }
 }

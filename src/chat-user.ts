@@ -1,5 +1,5 @@
 import * as _ from 'underscore';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'typed-event-emitter';
 import { ChannelCommunicationService } from './communication-service';
 import * as ShareDB from 'sharedb/lib/client';
 
@@ -22,13 +22,10 @@ export class ChatUser extends EventEmitter {
     }
     private typingStatus:string='IDLE';
     public getIsMe():boolean { return this.isMe; };
-    // public isActive():boolean { return this.active; };
     public getID():string { return this.id; }
     public getName():string { return this.name; }
     public getColorIndex():number { return this.colorIndex; };
-    // public setIsActive(active:boolean):void { this.active = active; };
     public getTypingStatus():string { return this.typingStatus; };
-
     public setLeft(ts:number) { this.left = ts; };
     public getLeft():number { return this.left; };
     public getJoined():number { return this.joined; };
@@ -38,14 +35,6 @@ export class ChatUser extends EventEmitter {
         (this as any).emit('typingStatus', {
             status: status
         });
-    }
-    public serialize() {
-        return {
-            id: this.id,
-            name: this.name,
-            typingStatus: this.typingStatus
-            // active: this.active
-        };
     }
 }
 
@@ -58,11 +47,8 @@ export class ChatUserList extends EventEmitter {
         super();
         this.chatDocPromise = this.channelService.getShareDBChat();
         this.ready = Promise.all([this.chatDocPromise, this.myIDPromise]).then((info) => {
-            // const [doc, myID] = info;
             const doc:ShareDB.Doc = info[0];
             const myID:string = info[1];
-            // const [doc:sharedb.Doc, myID:string] = info;
-            // console.log(doc);
             _.each(doc.data.allUsers, (oi:any) => {
                 this.allUsers.set(oi.id, this.createUser(oi, myID));
             });
@@ -148,7 +134,6 @@ export class ChatUserList extends EventEmitter {
         return null;
     }
     public getActiveUsers():Array<ChatUser> {
-        // return [];
         return Array.from(this.activeUsers.values());
     }
 }

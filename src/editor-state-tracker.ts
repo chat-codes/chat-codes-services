@@ -1,11 +1,9 @@
-//<reference path="./typings/node/node.d.ts" />
 import * as _ from 'underscore';
 import * as FuzzySet from 'fuzzyset.js';
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'typed-event-emitter';
 import { ChannelCommunicationService } from './communication-service';
 import { ChatUser, ChatUserList } from './chat-user';
 import { Timestamped } from './chat-messages';
-import * as CodeMirror from 'codemirror';
 import * as ShareDB from 'sharedb/lib/client';
 import * as otText from 'ot-text';
 
