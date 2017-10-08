@@ -3,7 +3,7 @@ import * as sharedb from 'sharedb/lib/client';
 import { ChatUserList, ChatUser } from './chat-user'
 import { WebSocketCommunicationLayer, NamespaceCommunicator } from './socket-communication-layer';
 import { MessageGroups } from './chat-messages';
-import { EventEmitter } from 'typed-event-emitter';
+import { EventEmitter } from './event';
 import { EditorStateTracker, EditorState } from './editor-state-tracker';
 
 export class ChannelCommunicationService extends EventEmitter {

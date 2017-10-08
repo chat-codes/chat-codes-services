@@ -12,7 +12,7 @@ var __extends = (this && this.__extends) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 var _ = require("underscore");
 var FuzzySet = require("fuzzyset.js");
-var typed_event_emitter_1 = require("typed-event-emitter");
+var event_1 = require("./event");
 var ShareDB = require("sharedb/lib/client");
 var otText = require("ot-text");
 ShareDB.types.map['json0'].registerSubtype(otText.type);
@@ -102,7 +102,7 @@ var RemoteCursorMarker = /** @class */ (function (_super) {
         this.editorState.getEditorWrapper().showRemoteCursors(this);
     };
     return RemoteCursorMarker;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 exports.RemoteCursorMarker = RemoteCursorMarker;
 var EditorState = /** @class */ (function () {
     function EditorState(suppliedState, editorWrapper, userList, mustPerformChange) {
@@ -435,6 +435,6 @@ var EditorStateTracker = /** @class */ (function (_super) {
         this.setVersion(CURRENT, CURRENT, extraInfo);
     };
     return EditorStateTracker;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 exports.EditorStateTracker = EditorStateTracker;
 //# sourceMappingURL=editor-state-tracker.js.map

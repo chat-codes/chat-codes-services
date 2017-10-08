@@ -11,7 +11,7 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var _ = require("underscore");
-var typed_event_emitter_1 = require("typed-event-emitter");
+var event_1 = require("./event");
 /*
  * Represents a single chat user
  */
@@ -59,7 +59,7 @@ var ChatUser = /** @class */ (function (_super) {
         });
     };
     return ChatUser;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 exports.ChatUser = ChatUser;
 var ChatUserList = /** @class */ (function (_super) {
     __extends(ChatUserList, _super);
@@ -166,6 +166,6 @@ var ChatUserList = /** @class */ (function (_super) {
         return Array.from(this.activeUsers.values());
     };
     return ChatUserList;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 exports.ChatUserList = ChatUserList;
 //# sourceMappingURL=chat-user.js.map

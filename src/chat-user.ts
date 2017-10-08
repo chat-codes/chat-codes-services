@@ -1,5 +1,5 @@
 import * as _ from 'underscore';
-import { EventEmitter } from 'typed-event-emitter';
+import { EventEmitter } from './event';
 import { ChannelCommunicationService } from './communication-service';
 import * as ShareDB from 'sharedb/lib/client';
 

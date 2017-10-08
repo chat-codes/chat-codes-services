@@ -1,6 +1,6 @@
 import * as _ from 'underscore';
 import * as FuzzySet from 'fuzzyset.js';
-import { EventEmitter } from 'typed-event-emitter';
+import { EventEmitter } from './event';
 import { ChannelCommunicationService } from './communication-service';
 import { ChatUser, ChatUserList } from './chat-user';
 import { Timestamped } from './chat-messages';

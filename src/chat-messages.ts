@@ -2,7 +2,7 @@ import * as _ from 'underscore';
 import { ChatUser, ChatUserList } from './chat-user';
 import { EditorStateTracker, EditorState } from './editor-state-tracker';
 import { ChannelCommunicationService } from './communication-service';
-import { EventEmitter } from 'typed-event-emitter';
+import { EventEmitter } from './event';
 import * as showdown from 'showdown';
 import * as difflib from 'difflib';
 import * as ShareDB from 'sharedb/lib/client';

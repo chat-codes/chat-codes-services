@@ -14,7 +14,7 @@ var _ = require("underscore");
 var chat_user_1 = require("./chat-user");
 var socket_communication_layer_1 = require("./socket-communication-layer");
 var chat_messages_1 = require("./chat-messages");
-var typed_event_emitter_1 = require("typed-event-emitter");
+var event_1 = require("./event");
 var editor_state_tracker_1 = require("./editor-state-tracker");
 var ChannelCommunicationService = /** @class */ (function (_super) {
     __extends(ChannelCommunicationService, _super);
@@ -256,7 +256,7 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
         return this.channelName;
     };
     return ChannelCommunicationService;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 exports.ChannelCommunicationService = ChannelCommunicationService;
 /* A class to create and manage ChannelCommunicationService instances */
 var CommunicationService = /** @class */ (function () {

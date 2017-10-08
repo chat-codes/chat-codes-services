@@ -11,7 +11,7 @@ var __extends = (this && this.__extends) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 var _ = require("underscore");
-var typed_event_emitter_1 = require("typed-event-emitter");
+var event_1 = require("./event");
 var showdown = require("showdown");
 var difflib = require("difflib");
 function tstamp(x) {
@@ -244,7 +244,7 @@ var Group = /** @class */ (function (_super) {
         });
     };
     return Group;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 var EditGroup = /** @class */ (function (_super) {
     __extends(EditGroup, _super);
     function EditGroup() {
@@ -529,6 +529,6 @@ var MessageGroups = /** @class */ (function (_super) {
         return this.messageGroups.length === 0;
     };
     return MessageGroups;
-}(typed_event_emitter_1.EventEmitter));
+}(event_1.EventEmitter));
 exports.MessageGroups = MessageGroups;
 //# sourceMappingURL=chat-messages.js.map

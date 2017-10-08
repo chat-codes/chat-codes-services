@@ -1,4 +1,4 @@
-import { EventEmitter } from 'typed-event-emitter';
+import { EventEmitter } from './event';
 import * as sharedb from 'sharedb/lib/client';
 import * as _ from 'underscore';
 import * as textType from 'ot-text';

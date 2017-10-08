@@ -4,7 +4,6 @@
     "description": "",
     "dependencies": {
         "@types/underscore": "^1.8.2",
-        "@types/wolfy87-eventemitter": "^4.2.32",
         "difflib": "^0.2.4",
         "fuzzyset.js": "0.0.4",
         "ot-text": "^1.0.1",
