@@ -23,7 +23,7 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param  {string}               channelName The name of the channel we're communicating on
      * @param  {class}               EditorWrapperClass A class whose instances satisfy the EditorWrapper interface
      */
-    constructor(private commService:CommunicationService, private channelName:string, private channelID:string, EditorWrapperClass) {
+    constructor(private commService:CommunicationService, private channelName:string, private channelID:string, private isObserver:boolean, EditorWrapperClass) {
         super();
         this.commLayer = commService.commLayer;
         this.channelCommLayer = this.commLayer.getNamespace(this.getChannelName(), this.channelID);
@@ -33,7 +33,7 @@ export class ChannelCommunicationService extends EventEmitter {
         this.cursorsDoc = this.createDocSubscription('cursors');
 
         this.userList = new ChatUserList(this.getMyID(), this);
-        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList);
+        this.editorStateTracker = new EditorStateTracker(EditorWrapperClass, this, this.userList, this.isObserver);
         this.messageGroups = new MessageGroups(this, this.userList, this.editorStateTracker);
     }
     public getUserList():ChatUserList { return this.userList; };
@@ -274,8 +274,8 @@ export class CommunicationService {
      * @param  {string}                      channelName The name of the channel
      * @return {ChannelCommunicationService}             The communication channel
      */
-    public createChannelWithName(channelName:string, channelID?:string):ChannelCommunicationService {
-        var channel = new ChannelCommunicationService(this, channelName, channelID, this.EditorWrapperClass);
+    public createChannelWithName(channelName:string, channelID:string=null, isObserver:boolean = false):ChannelCommunicationService {
+        var channel = new ChannelCommunicationService(this, channelName, channelID, isObserver, this.EditorWrapperClass);
         this.clients[channelName] = channel;
         return channel;
     }

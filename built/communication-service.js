@@ -24,11 +24,12 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
      * @param  {string}               channelName The name of the channel we're communicating on
      * @param  {class}               EditorWrapperClass A class whose instances satisfy the EditorWrapper interface
      */
-    function ChannelCommunicationService(commService, channelName, channelID, EditorWrapperClass) {
+    function ChannelCommunicationService(commService, channelName, channelID, isObserver, EditorWrapperClass) {
         var _this = _super.call(this) || this;
         _this.commService = commService;
         _this.channelName = channelName;
         _this.channelID = channelID;
+        _this.isObserver = isObserver;
         _this._isRoot = false;
         _this.cachedEditorVersions = new Map();
         _this.commLayer = commService.commLayer;
@@ -37,7 +38,7 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
         _this.editorsDoc = _this.createDocSubscription('editors');
         _this.cursorsDoc = _this.createDocSubscription('cursors');
         _this.userList = new chat_user_1.ChatUserList(_this.getMyID(), _this);
-        _this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, _this, _this.userList);
+        _this.editorStateTracker = new editor_state_tracker_1.EditorStateTracker(EditorWrapperClass, _this, _this.userList, _this.isObserver);
         _this.messageGroups = new chat_messages_1.MessageGroups(_this, _this.userList, _this.editorStateTracker);
         return _this;
     }
@@ -275,8 +276,10 @@ var CommunicationService = /** @class */ (function () {
      * @param  {string}                      channelName The name of the channel
      * @return {ChannelCommunicationService}             The communication channel
      */
-    CommunicationService.prototype.createChannelWithName = function (channelName, channelID) {
-        var channel = new ChannelCommunicationService(this, channelName, channelID, this.EditorWrapperClass);
+    CommunicationService.prototype.createChannelWithName = function (channelName, channelID, isObserver) {
+        if (channelID === void 0) { channelID = null; }
+        if (isObserver === void 0) { isObserver = false; }
+        var channel = new ChannelCommunicationService(this, channelName, channelID, isObserver, this.EditorWrapperClass);
         this.clients[channelName] = channel;
         return channel;
     };

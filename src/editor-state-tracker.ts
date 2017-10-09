@@ -138,7 +138,7 @@ export class EditorState {
 	private modified:boolean;
 	private deltaPointer:number=-1;
 	private currentVersion:number=CURRENT;
-    constructor(suppliedState, private editorWrapper, private userList:ChatUserList, mustPerformChange:boolean) {
+    constructor(suppliedState, private editorWrapper, private userList:ChatUserList, private isObserver:boolean) {
         let state = _.extend({
             isOpen: true,
             deltas: [],
@@ -191,7 +191,11 @@ export class EditorState {
 			this.remoteCursors.showCursors();
 		} else {
 			editorWrapper.suspendEditorBinding();
-			editorWrapper.setReadOnly(true, extraInfo);
+			if(this.isObserver) {
+				editorWrapper.setReadOnly(false, extraInfo);
+			} else {
+				editorWrapper.setReadOnly(true, extraInfo);
+			}
 			this.remoteCursors.hideCursors();
 		}
 	}
@@ -205,7 +209,7 @@ export class EditorStateTracker extends EventEmitter {
 	private currentVersion:number=CURRENT;
 	private currentTimestamp:number=CURRENT;
     public ready:Promise<boolean>;
-    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList) {
+    constructor(protected EditorWrapperClass, private channelCommunicationService:ChannelCommunicationService, private userList:ChatUserList, private isObserver:boolean) {
 		super();
 		const editorsDocPromise = this.channelCommunicationService.getShareDBEditors().then((editorDoc) => {
 			editorDoc.data.forEach((li) => {
@@ -345,7 +349,7 @@ export class EditorStateTracker extends EventEmitter {
 		if(this.editorStates.has(id)) {
 			return this.editorStates.get(id);
 		} else {
-			const editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
+			const editorState =  new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, this.isObserver);
 			this.editorStates.set(id, editorState);
 			return editorState;
 		}

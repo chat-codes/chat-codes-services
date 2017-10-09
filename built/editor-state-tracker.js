@@ -105,10 +105,11 @@ var RemoteCursorMarker = /** @class */ (function (_super) {
 }(event_1.EventEmitter));
 exports.RemoteCursorMarker = RemoteCursorMarker;
 var EditorState = /** @class */ (function () {
-    function EditorState(suppliedState, editorWrapper, userList, mustPerformChange) {
+    function EditorState(suppliedState, editorWrapper, userList, isObserver) {
         var _this = this;
         this.editorWrapper = editorWrapper;
         this.userList = userList;
+        this.isObserver = isObserver;
         this.selections = {};
         this.remoteCursors = new RemoteCursorMarker(this);
         this.deltaPointer = -1;
@@ -171,7 +172,12 @@ var EditorState = /** @class */ (function () {
         }
         else {
             editorWrapper.suspendEditorBinding();
-            editorWrapper.setReadOnly(true, extraInfo);
+            if (this.isObserver) {
+                editorWrapper.setReadOnly(false, extraInfo);
+            }
+            else {
+                editorWrapper.setReadOnly(true, extraInfo);
+            }
             this.remoteCursors.hideCursors();
         }
     };
@@ -184,11 +190,12 @@ var EditorState = /** @class */ (function () {
 exports.EditorState = EditorState;
 var EditorStateTracker = /** @class */ (function (_super) {
     __extends(EditorStateTracker, _super);
-    function EditorStateTracker(EditorWrapperClass, channelCommunicationService, userList) {
+    function EditorStateTracker(EditorWrapperClass, channelCommunicationService, userList, isObserver) {
         var _this = _super.call(this) || this;
         _this.EditorWrapperClass = EditorWrapperClass;
         _this.channelCommunicationService = channelCommunicationService;
         _this.userList = userList;
+        _this.isObserver = isObserver;
         _this.editorStates = new Map();
         _this.currentVersion = CURRENT;
         _this.currentTimestamp = CURRENT;
@@ -336,7 +343,7 @@ var EditorStateTracker = /** @class */ (function (_super) {
             return this.editorStates.get(id);
         }
         else {
-            var editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, mustPerformChange);
+            var editorState = new EditorState(state, new this.EditorWrapperClass(state, this.channelCommunicationService), this.userList, this.isObserver);
             this.editorStates.set(id, editorState);
             return editorState;
         }
