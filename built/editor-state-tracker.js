@@ -146,6 +146,8 @@ var EditorState = /** @class */ (function () {
     ;
     EditorState.prototype.getIsModified = function () { return this.modified; };
     ;
+    EditorState.prototype.getIsObserver = function () { return this.isObserver; };
+    ;
     EditorState.prototype.setText = function (val) {
         this.editorWrapper.setText(val);
     };
@@ -166,18 +168,19 @@ var EditorState = /** @class */ (function () {
         this.currentVersion = version;
         var editorWrapper = this.getEditorWrapper();
         if (this.isLatestVersion()) {
-            editorWrapper.resumeEditorBinding();
-            editorWrapper.setReadOnly(false, extraInfo);
-            this.remoteCursors.showCursors();
+            console.log(this.isObserver);
+            if (this.isObserver) {
+                editorWrapper.setReadOnly(true, extraInfo);
+            }
+            else {
+                editorWrapper.resumeEditorBinding();
+                editorWrapper.setReadOnly(false, extraInfo);
+                this.remoteCursors.showCursors();
+            }
         }
         else {
             editorWrapper.suspendEditorBinding();
-            if (this.isObserver) {
-                editorWrapper.setReadOnly(false, extraInfo);
-            }
-            else {
-                editorWrapper.setReadOnly(true, extraInfo);
-            }
+            editorWrapper.setReadOnly(true, extraInfo);
             this.remoteCursors.hideCursors();
         }
     };

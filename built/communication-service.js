@@ -121,19 +121,21 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
      */
     ChannelCommunicationService.prototype.sendTextMessage = function (message) {
         var _this = this;
-        Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then(function (info) {
-            var myID = info[0];
-            var chatDoc = info[1];
-            var editorsDoc = info[2];
-            var data = {
-                uid: myID,
-                type: 'text',
-                message: message,
-                timestamp: _this.getTimestamp(),
-                editorsVersion: editorsDoc.version
-            };
-            chatDoc.submitOp([{ p: ['messages', chatDoc.data.messages.length], li: data }]);
-        });
+        if (!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then(function (info) {
+                var myID = info[0];
+                var chatDoc = info[1];
+                var editorsDoc = info[2];
+                var data = {
+                    uid: myID,
+                    type: 'text',
+                    message: message,
+                    timestamp: _this.getTimestamp(),
+                    editorsVersion: editorsDoc.version
+                };
+                chatDoc.submitOp([{ p: ['messages', chatDoc.data.messages.length], li: data }]);
+            });
+        }
     };
     /**
      * Update typing status to either:
@@ -143,12 +145,14 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
      * @param {string} status IDLE, ACTIVE_TYPING, or IDLE_TYPED
      */
     ChannelCommunicationService.prototype.sendTypingStatus = function (status) {
-        Promise.all([this.getMyID(), this.getShareDBChat()]).then(function (info) {
-            var myID = info[0];
-            var doc = info[1];
-            var oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
-            doc.submitOp([{ p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status }]);
-        });
+        if (!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBChat()]).then(function (info) {
+                var myID = info[0];
+                var doc = info[1];
+                var oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
+                doc.submitOp([{ p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status }]);
+            });
+        }
     };
     /**
      * The user modified something in the editor
@@ -174,19 +178,21 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
      * @param {[type]} remote=true Whether this was from a remote user
      */
     ChannelCommunicationService.prototype.onCursorPositionChanged = function (delta) {
-        Promise.all([this.getMyID(), this.getShareDBCursors()]).then(function (info) {
-            var myID = info[0];
-            var doc = info[1];
-            var editorID = delta.editorID;
-            if (_.has(doc.data, editorID)) {
-                doc.submitOp({ p: [editorID, 'userCursors', myID], oi: delta, od: doc.data[editorID]['userCursors'][myID] });
-            }
-            else {
-                var oi = { 'userCursors': {}, 'userSelections': {} };
-                oi['userCursors'][myID] = delta;
-                doc.submitOp({ p: [editorID], oi: oi });
-            }
-        });
+        if (!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBCursors()]).then(function (info) {
+                var myID = info[0];
+                var doc = info[1];
+                var editorID = delta.editorID;
+                if (_.has(doc.data, editorID)) {
+                    doc.submitOp({ p: [editorID, 'userCursors', myID], oi: delta, od: doc.data[editorID]['userCursors'][myID] });
+                }
+                else {
+                    var oi = { 'userCursors': {}, 'userSelections': {} };
+                    oi['userCursors'][myID] = delta;
+                    doc.submitOp({ p: [editorID], oi: oi });
+                }
+            });
+        }
     };
     /**
      * The selected content for the user has changed
@@ -194,19 +200,21 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
      * @param {[type]} remote=true Whether this was from a remote user
      */
     ChannelCommunicationService.prototype.onCursorSelectionChanged = function (delta) {
-        Promise.all([this.getMyID(), this.getShareDBCursors()]).then(function (info) {
-            var myID = info[0];
-            var doc = info[1];
-            var editorID = delta.editorID;
-            if (_.has(doc.data, editorID)) {
-                doc.submitOp({ p: [editorID, 'userSelections', myID], oi: delta, od: doc.data[editorID]['userSelections'][myID] });
-            }
-            else {
-                var oi = { 'userCursors': {}, 'userSelections': {} };
-                oi['userSelections'][myID] = delta;
-                doc.submitOp({ p: [editorID], oi: oi });
-            }
-        });
+        if (!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBCursors()]).then(function (info) {
+                var myID = info[0];
+                var doc = info[1];
+                var editorID = delta.editorID;
+                if (_.has(doc.data, editorID)) {
+                    doc.submitOp({ p: [editorID, 'userSelections', myID], oi: delta, od: doc.data[editorID]['userSelections'][myID] });
+                }
+                else {
+                    var oi = { 'userCursors': {}, 'userSelections': {} };
+                    oi['userSelections'][myID] = delta;
+                    doc.submitOp({ p: [editorID], oi: oi });
+                }
+            });
+        }
     };
     /**
      * Called when the terminal outputs something
@@ -255,6 +263,9 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
     ;
     ChannelCommunicationService.prototype.getChannelName = function () {
         return this.channelName;
+    };
+    ChannelCommunicationService.prototype.getIsObserver = function () {
+        return this.isObserver;
     };
     return ChannelCommunicationService;
 }(event_1.EventEmitter));

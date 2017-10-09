@@ -164,6 +164,7 @@ export class EditorState {
 	public getRemoteCursors():RemoteCursorMarker { return this.remoteCursors; };
 	public getEditorID():string { return this.editorID; };
 	public getIsModified():boolean { return this.modified; };
+	public getIsObserver():boolean { return this.isObserver; };
 	public setText(val:string) {
 		this.editorWrapper.setText(val);
 	}
@@ -186,16 +187,17 @@ export class EditorState {
 		const editorWrapper = this.getEditorWrapper();
 
 		if(this.isLatestVersion()) {
-			editorWrapper.resumeEditorBinding();
-			editorWrapper.setReadOnly(false, extraInfo);
-			this.remoteCursors.showCursors();
+			console.log(this.isObserver);
+			if(this.isObserver) {
+				editorWrapper.setReadOnly(true, extraInfo);
+			} else {
+				editorWrapper.resumeEditorBinding();
+				editorWrapper.setReadOnly(false, extraInfo);
+				this.remoteCursors.showCursors();
+			}
 		} else {
 			editorWrapper.suspendEditorBinding();
-			if(this.isObserver) {
-				editorWrapper.setReadOnly(false, extraInfo);
-			} else {
-				editorWrapper.setReadOnly(true, extraInfo);
-			}
+			editorWrapper.setReadOnly(true, extraInfo);
 			this.remoteCursors.hideCursors();
 		}
 	}

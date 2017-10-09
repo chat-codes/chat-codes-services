@@ -116,20 +116,22 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {string} message The text of the message to send
      */
     public sendTextMessage(message:string):void {
-        Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then((info) => {
-            const myID:string = info[0]
-            const chatDoc:sharedb.Doc = info[1]
-            const editorsDoc:sharedb.Doc = info[2]
+        if(!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then((info) => {
+                const myID:string = info[0]
+                const chatDoc:sharedb.Doc = info[1]
+                const editorsDoc:sharedb.Doc = info[2]
 
-            const data = {
-                uid: myID,
-                type: 'text',
-                message: message,
-                timestamp: this.getTimestamp(),
-                editorsVersion: editorsDoc.version
-            };
-			chatDoc.submitOp([{p: ['messages', chatDoc.data.messages.length], li: data}]);
-        });
+                const data = {
+                    uid: myID,
+                    type: 'text',
+                    message: message,
+                    timestamp: this.getTimestamp(),
+                    editorsVersion: editorsDoc.version
+                };
+    			chatDoc.submitOp([{p: ['messages', chatDoc.data.messages.length], li: data}]);
+            });
+        }
     }
 
     /**
@@ -140,13 +142,15 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {string} status IDLE, ACTIVE_TYPING, or IDLE_TYPED
      */
     public sendTypingStatus(status:string):void {
-        Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
-            const myID:string = info[0]
-            const doc:sharedb.Doc = info[1]
+        if(!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBChat()]).then((info) => {
+                const myID:string = info[0]
+                const doc:sharedb.Doc = info[1]
 
-            const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
-            doc.submitOp([{p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status}]);
-        });
+                const oldValue = doc.data['activeUsers'][myID]['info']['typingStatus'];
+                doc.submitOp([{p: ['activeUsers', myID, 'info', 'typingStatus'], od: oldValue, oi: status}]);
+            });
+        }
     }
 
     /**
@@ -172,18 +176,20 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {[type]} remote=true Whether this was from a remote user
      */
     public onCursorPositionChanged(delta):void {
-        Promise.all([this.getMyID(), this.getShareDBCursors()]).then((info) => {
-            const myID:string = info[0]
-            const doc:sharedb.Doc = info[1]
-            const {editorID} = delta;
-            if(_.has(doc.data, editorID)) {
-                doc.submitOp({p: [editorID, 'userCursors', myID], oi: delta, od: doc.data[editorID]['userCursors'][myID]});
-            } else {
-                const oi = { 'userCursors': {}, 'userSelections': {} };
-                oi['userCursors'][myID] = delta;
-                doc.submitOp({p: [editorID], oi});
-            }
-        });
+        if(!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBCursors()]).then((info) => {
+                const myID:string = info[0]
+                const doc:sharedb.Doc = info[1]
+                const {editorID} = delta;
+                if(_.has(doc.data, editorID)) {
+                    doc.submitOp({p: [editorID, 'userCursors', myID], oi: delta, od: doc.data[editorID]['userCursors'][myID]});
+                } else {
+                    const oi = { 'userCursors': {}, 'userSelections': {} };
+                    oi['userCursors'][myID] = delta;
+                    doc.submitOp({p: [editorID], oi});
+                }
+            });
+        }
     }
 
     /**
@@ -192,18 +198,20 @@ export class ChannelCommunicationService extends EventEmitter {
      * @param {[type]} remote=true Whether this was from a remote user
      */
     public onCursorSelectionChanged(delta):void {
-        Promise.all([this.getMyID(), this.getShareDBCursors()]).then((info) => {
-            const myID:string = info[0]
-            const doc:sharedb.Doc = info[1]
-            const {editorID} = delta;
-            if(_.has(doc.data, editorID)) {
-                doc.submitOp({p: [editorID, 'userSelections', myID], oi: delta, od: doc.data[editorID]['userSelections'][myID]});
-            } else {
-                const oi = { 'userCursors':{}, 'userSelections': {} };
-                oi['userSelections'][myID] = delta;
-                doc.submitOp({p: [editorID], oi});
-            }
-        });
+        if(!this.isObserver) {
+            Promise.all([this.getMyID(), this.getShareDBCursors()]).then((info) => {
+                const myID:string = info[0]
+                const doc:sharedb.Doc = info[1]
+                const {editorID} = delta;
+                if(_.has(doc.data, editorID)) {
+                    doc.submitOp({p: [editorID, 'userSelections', myID], oi: delta, od: doc.data[editorID]['userSelections'][myID]});
+                } else {
+                    const oi = { 'userCursors':{}, 'userSelections': {} };
+                    oi['userSelections'][myID] = delta;
+                    doc.submitOp({p: [editorID], oi});
+                }
+            });
+        }
     }
 
     /**
@@ -254,6 +262,9 @@ export class ChannelCommunicationService extends EventEmitter {
     public getChannelName():string {
         return this.channelName;
     }
+    public getIsObserver():boolean {
+        return this.isObserver;
+    }
 }
 
 /* A class to create and manage ChannelCommunicationService instances */
@@ -274,7 +285,7 @@ export class CommunicationService {
      * @param  {string}                      channelName The name of the channel
      * @return {ChannelCommunicationService}             The communication channel
      */
-    public createChannelWithName(channelName:string, channelID:string=null, isObserver:boolean = false):ChannelCommunicationService {
+    public createChannelWithName(channelName:string, channelID:string=null, isObserver:boolean=false):ChannelCommunicationService {
         var channel = new ChannelCommunicationService(this, channelName, channelID, isObserver, this.EditorWrapperClass);
         this.clients[channelName] = channel;
         return channel;
