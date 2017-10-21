@@ -15,7 +15,7 @@ var event_1 = require("./event");
 /*
  * Represents a single chat user
  */
-var ChatUser = /** @class */ (function (_super) {
+var ChatUser = (function (_super) {
     __extends(ChatUser, _super);
     /**
      * constructor
@@ -61,7 +61,7 @@ var ChatUser = /** @class */ (function (_super) {
     return ChatUser;
 }(event_1.EventEmitter));
 exports.ChatUser = ChatUser;
-var ChatUserList = /** @class */ (function (_super) {
+var ChatUserList = (function (_super) {
     __extends(ChatUserList, _super);
     function ChatUserList(myIDPromise, channelService) {
         var _this = _super.call(this) || this;

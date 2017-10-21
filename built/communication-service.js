@@ -16,7 +16,7 @@ var socket_communication_layer_1 = require("./socket-communication-layer");
 var chat_messages_1 = require("./chat-messages");
 var event_1 = require("./event");
 var editor_state_tracker_1 = require("./editor-state-tracker");
-var ChannelCommunicationService = /** @class */ (function (_super) {
+var ChannelCommunicationService = (function (_super) {
     __extends(ChannelCommunicationService, _super);
     /**
      * [constructor description]
@@ -271,7 +271,7 @@ var ChannelCommunicationService = /** @class */ (function (_super) {
 }(event_1.EventEmitter));
 exports.ChannelCommunicationService = ChannelCommunicationService;
 /* A class to create and manage ChannelCommunicationService instances */
-var CommunicationService = /** @class */ (function () {
+var CommunicationService = (function () {
     function CommunicationService(authInfo, EditorWrapperClass) {
         this.EditorWrapperClass = EditorWrapperClass;
         this.clients = {}; // Maps channel names to channel comms

@@ -21,7 +21,7 @@ var CURRENT = -1;
 /*
  * Tracks a set of remote cursors.
  */
-var RemoteCursorMarker = /** @class */ (function (_super) {
+var RemoteCursorMarker = (function (_super) {
     __extends(RemoteCursorMarker, _super);
     function RemoteCursorMarker(editorState) {
         var _this = _super.call(this) || this;
@@ -104,7 +104,7 @@ var RemoteCursorMarker = /** @class */ (function (_super) {
     return RemoteCursorMarker;
 }(event_1.EventEmitter));
 exports.RemoteCursorMarker = RemoteCursorMarker;
-var EditorState = /** @class */ (function () {
+var EditorState = (function () {
     function EditorState(suppliedState, editorWrapper, userList, isObserver) {
         var _this = this;
         this.editorWrapper = editorWrapper;
@@ -191,7 +191,7 @@ var EditorState = /** @class */ (function () {
     return EditorState;
 }());
 exports.EditorState = EditorState;
-var EditorStateTracker = /** @class */ (function (_super) {
+var EditorStateTracker = (function (_super) {
     __extends(EditorStateTracker, _super);
     function EditorStateTracker(EditorWrapperClass, channelCommunicationService, userList, isObserver) {
         var _this = _super.call(this) || this;

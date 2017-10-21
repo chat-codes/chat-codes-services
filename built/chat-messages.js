@@ -39,7 +39,7 @@ var ConnectionAction;
     ConnectionAction[ConnectionAction["disconnect"] = 2] = "disconnect";
 })(ConnectionAction || (ConnectionAction = {}));
 ;
-var ConnectionMessage = /** @class */ (function () {
+var ConnectionMessage = (function () {
     function ConnectionMessage(user, timestamp, action) {
         this.user = user;
         this.timestamp = timestamp;
@@ -54,7 +54,7 @@ var ConnectionMessage = /** @class */ (function () {
     return ConnectionMessage;
 }());
 exports.ConnectionMessage = ConnectionMessage;
-var EditMessage = /** @class */ (function () {
+var EditMessage = (function () {
     function EditMessage(users, editors, timestamp, contents) {
         this.users = users;
         this.editors = editors;
@@ -72,7 +72,7 @@ var EditMessage = /** @class */ (function () {
     return EditMessage;
 }());
 exports.EditMessage = EditMessage;
-var TextMessage = /** @class */ (function () {
+var TextMessage = (function () {
     function TextMessage(sender, timestamp, message, editorsVersion, editorStateTracker) {
         var _this = this;
         this.sender = sender;
@@ -140,7 +140,7 @@ var TextMessage = /** @class */ (function () {
     return TextMessage;
 }());
 exports.TextMessage = TextMessage;
-var Group = /** @class */ (function (_super) {
+var Group = (function (_super) {
     __extends(Group, _super);
     function Group(items) {
         var _this = _super.call(this) || this;
@@ -245,7 +245,7 @@ var Group = /** @class */ (function (_super) {
     };
     return Group;
 }(event_1.EventEmitter));
-var EditGroup = /** @class */ (function (_super) {
+var EditGroup = (function (_super) {
     __extends(EditGroup, _super);
     function EditGroup() {
         return _super !== null && _super.apply(this, arguments) || this;
@@ -319,7 +319,7 @@ exports.EditGroup = EditGroup;
  * MessageGroup represents a group of messages that were sent by the same user *around*
  * the same time with no other users interrupting.
  */
-var TextMessageGroup = /** @class */ (function (_super) {
+var TextMessageGroup = (function (_super) {
     __extends(TextMessageGroup, _super);
     function TextMessageGroup() {
         return _super !== null && _super.apply(this, arguments) || this;
@@ -341,7 +341,7 @@ var TextMessageGroup = /** @class */ (function (_super) {
 }(Group));
 exports.TextMessageGroup = TextMessageGroup;
 ;
-var ConnectionMessageGroup = /** @class */ (function (_super) {
+var ConnectionMessageGroup = (function (_super) {
     __extends(ConnectionMessageGroup, _super);
     function ConnectionMessageGroup() {
         return _super !== null && _super.apply(this, arguments) || this;
@@ -367,7 +367,7 @@ exports.ConnectionMessageGroup = ConnectionMessageGroup;
 /*
  * A class to keep track of all of the messages in a conversation (where messages are grouped).
  */
-var MessageGroups = /** @class */ (function (_super) {
+var MessageGroups = (function (_super) {
     __extends(MessageGroups, _super);
     function MessageGroups(channelService, chatUserList, editorStateTracker) {
         var _this = _super.call(this) || this;

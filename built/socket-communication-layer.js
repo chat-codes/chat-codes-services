@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 var sharedb = require("sharedb/lib/client");
-var NamespaceCommunicator = /** @class */ (function () {
+var NamespaceCommunicator = (function () {
     function NamespaceCommunicator(channelName, channelID, username, ws, sdbp) {
         var _this = this;
         this.channelName = channelName;
@@ -137,7 +137,8 @@ var NamespaceCommunicator = /** @class */ (function () {
     NamespaceCommunicator.prototype.getShareDBObject = function (path) {
         var _this = this;
         return this.sdbp.then(function (connection) {
-            return connection.get(_this.getShareDBNamespace(), path);
+            return connection.get('chatcodes', _this.getShareDBNamespace() + "-" + path);
+            // return connection.get(this.getShareDBNamespace(), path);
         });
     };
     ;
@@ -156,7 +157,7 @@ var NamespaceCommunicator = /** @class */ (function () {
     return NamespaceCommunicator;
 }());
 exports.NamespaceCommunicator = NamespaceCommunicator;
-var WebSocketCommunicationLayer = /** @class */ (function () {
+var WebSocketCommunicationLayer = (function () {
     function WebSocketCommunicationLayer(authInfo) {
         var _this = this;
         this.authInfo = authInfo;

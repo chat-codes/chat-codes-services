@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var EventEmitter = /** @class */ (function () {
+var EventEmitter = (function () {
     function EventEmitter() {
         this.eventListeners = new Map();
     }
@@ -67,7 +67,7 @@ var EventEmitter = /** @class */ (function () {
     return EventEmitter;
 }());
 exports.EventEmitter = EventEmitter;
-var Listener = /** @class */ (function () {
+var Listener = (function () {
     function Listener(owner, event, listener) {
         this.owner = owner;
         this.event = event;

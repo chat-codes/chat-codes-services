@@ -123,7 +123,8 @@ export class NamespaceCommunicator {
 	public getShareDBNamespace():string { return this.shareDBNamespace; };
 	public getShareDBObject(path:string):Promise<sharedb.Doc> {
 		return this.sdbp.then((connection) => {
-			return connection.get(this.getShareDBNamespace(), path);
+			return connection.get('chatcodes', `${this.getShareDBNamespace()}-${path}`);
+			// return connection.get(this.getShareDBNamespace(), path);
 		});
 	};
 	public destroy() {
