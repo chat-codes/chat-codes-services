@@ -187,7 +187,6 @@ export class EditorState {
 		const editorWrapper = this.getEditorWrapper();
 
 		if(this.isLatestVersion()) {
-			console.log(this.isObserver);
 			if(this.isObserver) {
 				editorWrapper.setReadOnly(true, extraInfo);
 			} else {

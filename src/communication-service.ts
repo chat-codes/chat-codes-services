@@ -134,6 +134,32 @@ export class ChannelCommunicationService extends EventEmitter {
         }
     }
 
+    public addAction(action:any):void {
+        Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then((info) => {
+            const myID:string = info[0]
+            const chatDoc:sharedb.Doc = info[1]
+            const editorsDoc:sharedb.Doc = info[2]
+
+            const data = {
+                uid: myID,
+                type: 'text',
+                action,
+                timestamp: this.getTimestamp()
+            };
+            chatDoc.submitOp([{p: ['actions', chatDoc.data.actions.length], li: data}]);
+        });
+    };
+
+    public getChatDoc():Promise<any> {
+        return Promise.all([this.getMyID(), this.getShareDBChat(), this.getShareDBEditors()]).then((info) => {
+            const myID:string = info[0]
+            const chatDoc:sharedb.Doc = info[1]
+            const editorsDoc:sharedb.Doc = info[2]
+
+            return chatDoc.data;
+        });
+    };
+
     /**
      * Update typing status to either:
      * - 'IDLE' - The user is not typing anything
